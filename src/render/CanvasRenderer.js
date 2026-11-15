@@ -239,6 +239,7 @@ export class CanvasRenderer {
       if (e.effects.shield) this._drawShield(ctx, e, now);
       if (e.effects.inked) this._drawInk(ctx, e); // ハゴイタンの 墨で ×
       if (e.trait.frozen && alpha > 0.5) this._drawFrozen(ctx, e); // 白の スピナーに こおらされた
+      if (Math.abs(e.effects.spin || 0) > 0.05 && alpha > 0.5) this._drawSpin(ctx, e, e.effects.spin, now, lift); // くるくる 回っている
       if (e.trait.clear && e.trait.camo) this._drawCamo(ctx, e, state.desk);
       // キラ（ガチャで 2回出た）は にじ色に 光る（見た目だけ）
       if (state.players[e.playerIndex]?.kira && alpha > 0.5) drawKira(ctx, e.def, e.x + jx, e.y + jy, e.angle, e.size * air, now);
@@ -898,6 +899,71 @@ export class CanvasRenderer {
   }
 
   // ハゴイタンの 墨で ×（次の番 ねらいの線が 見えない）
+  /**
+   * 回転の 線：回っている 向きに ながれる 弧（速く 回っているほど 濃く・長く）
+   * @param spin 回転の 速さ（＋は 時計回り）
+   */
+  _drawSpin(ctx, e, spin, now, lift = { x: 0, y: 0 }) {
+    const r = eraserExtent(e.def) * e.size;
+    const k = Math.min(1, Math.abs(spin) / 0.45);
+    const dir = spin > 0 ? 1 : -1;
+    const phase = (now / 70) * dir;
+    const len = 0.5 + 1.0 * k; // 弧の 長さ（ラジアン）
+    ctx.save();
+    ctx.translate(e.x + lift.x, e.y + lift.y);
+    ctx.lineCap = 'round';
+    for (let i = 0; i < 3; i++) {
+      const a0 = phase + (i * Math.PI * 2) / 3;
+      const rr = r * (1.12 + 0.1 * (i % 2));
+      // しっぽ（うしろ）ほど うすく：2つに 分けて かく
+      for (const [from, to, alpha, lw] of [[0, 0.55, 0.35, 2.2], [0.55, 1, 0.85, 3.2]]) {
+        ctx.beginPath();
+        ctx.arc(0, 0, rr, a0 - dir * len * (1 - from), a0 - dir * len * (1 - to), dir < 0);
+        ctx.strokeStyle = `rgba(255,255,255,${(alpha * (0.35 + 0.65 * k)).toFixed(3)})`;
+        ctx.lineWidth = lw;
+        ctx.stroke();
+      }
+    }
+    ctx.restore();
+  }
+
+  /** ねらっている 間：かかる 回転の 向きと 強さ（消しゴムの まわりの 矢印の 輪） */
+  _drawAimSpin(ctx, e, spin) {
+    const r = eraserExtent(e.def) * e.size + 9;
+    const dir = spin > 0 ? 1 : -1;
+    const k = Math.min(1, Math.abs(spin));
+    const len = 0.7 + 3.6 * k; // 強いほど 長い 輪
+    const a0 = -Math.PI / 2 - (dir * len) / 2;
+    const a1 = a0 + dir * len;
+    ctx.save();
+    ctx.translate(e.x, e.y);
+    ctx.lineCap = 'round';
+    for (const [lw, col] of [[7, 'white'], [4, `hsl(${200 - 150 * k}, 85%, 50%)`]]) {
+      ctx.beginPath();
+      ctx.arc(0, 0, r, a0, a1, dir < 0);
+      ctx.strokeStyle = col;
+      ctx.lineWidth = lw;
+      ctx.stroke();
+    }
+    // 矢じり
+    const hx = Math.cos(a1) * r;
+    const hy = Math.sin(a1) * r;
+    const ta = a1 + (dir * Math.PI) / 2;
+    ctx.translate(hx, hy);
+    ctx.rotate(ta);
+    ctx.beginPath();
+    ctx.moveTo(9, 0);
+    ctx.lineTo(-4, -7);
+    ctx.lineTo(-4, 7);
+    ctx.closePath();
+    ctx.fillStyle = `hsl(${200 - 150 * k}, 85%, 50%)`;
+    ctx.fill();
+    ctx.lineWidth = 2;
+    ctx.strokeStyle = 'white';
+    ctx.stroke();
+    ctx.restore();
+  }
+
   /** こおっている（白の スピナー）：うすい 水色の こおりと ❄ */
   _drawFrozen(ctx, e) {
     const r = eraserExtent(e.def) * e.size;
@@ -1524,6 +1590,8 @@ export class CanvasRenderer {
     const color = this._strengthColor(aim.strength);
     const max = aim.strength >= 0.999; // いちばん 強い
     const pulse = 0.5 + 0.5 * Math.sin(performance.now() / 90);
+    // かかる 回転の 向きと 強さ（回らない 消しゴムには 出さない）
+    if (Math.abs(spin) > 0.01 && !['hajiki', 'boccia', 'tube', 'knight', 'boomerang'].includes(e.def.trait?.id)) this._drawAimSpin(ctx, e, spin);
 
     ctx.save();
     ctx.translate(e.x, e.y);

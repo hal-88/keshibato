@@ -888,7 +888,9 @@ export class Game {
     const v = s * e.maxSpeed * this.turn.powerMul * this._spinPower(e) * (e.dicePower || 1) * (t.id === 'yut' ? e.yutPower || 1 : 1) * (t.id === 'shagai' ? this._shagaiFace(e).power ?? 1 : 1); // ユンノの 目・シャガインの 面
     Body.setVelocity(e.body, { x: ux * v, y: uy * v });
     const spinScale = t.id === 'spinny' ? t.spinScale ?? 1.7 : 1;
-    let w = Math.max(-1, Math.min(1, spin)) * PHYSICS.spin.maxAngular * s * spinScale;
+    // 回転：弱く 弾いても かかる（minPowerShare）。のこりは 弾く 強さに 比例
+    const sShare = PHYSICS.spin.minPowerShare ?? 0;
+    let w = Math.max(-1, Math.min(1, spin)) * PHYSICS.spin.maxAngular * (sShare + (1 - sShare) * s) * spinScale;
     // ドーナッツ：まん中を弾いても くるくる回る
     if (t.autoSpin && Math.abs(w) < t.autoSpin * s) w = (w < 0 ? -1 : 1) * t.autoSpin * Math.max(0.4, s);
     if (t.id === 'tube') w = 0; // 転がるだけで 回らない
@@ -1907,8 +1909,12 @@ export class Game {
         if (t.color === 'yellow' && e.dashEnd && this.time > e.dashEnd && this._isShooter(e)) local *= t.afterBrake ?? 1.7; // 黄：すぐ 遅くなる
       }
       if (e.frozen) local *= e.frozen; // 白の スピナーに こおらされた
-      b.frictionAir = Math.min(0.5, e.baseFrictionAir * local);
-      const brake = k * this.desk.frictionScale * local;
+      // 回転：回っていると よく すべる（速く 回っているほど ブレーキが へる）
+      const gFrom = PHYSICS.spin.glideFrom ?? 0;
+      const spinRatio = Math.max(0, Math.min(1, (Math.abs(b.angularVelocity) - gFrom) / (PHYSICS.spin.maxAngular - gFrom)));
+      const glide = 1 - (PHYSICS.spin.glide ?? 0) * spinRatio;
+      b.frictionAir = Math.min(0.5, e.baseFrictionAir * local * glide);
+      const brake = k * this.desk.frictionScale * local * glide;
 
       let vx = b.velocity.x;
       let vy = b.velocity.y;
@@ -1929,7 +1935,9 @@ export class Game {
         const damping = t.id === 'spinny' ? t.damping ?? 0.3 : PHYSICS.spin.damping;
         const fa = b.frictionAir;
         const keep = (1 - fa * damping) / (1 - fa);
-        const w2 = Math.sign(w) * Math.max(0, Math.abs(w) - PHYSICS.angularDecel * brake) * keep;
+        // 進むのが 止まったら、回転も すぐ 止める（その場で 回りつづけて 番が 長く ならないように）
+        const still = s < (PHYSICS.spin.stillSpeed ?? 0) ? PHYSICS.spin.stillBrake ?? 1 : 1;
+        const w2 = Math.sign(w) * Math.max(0, Math.abs(w) - PHYSICS.angularDecel * brake * still) * keep;
         Body.setAngularVelocity(b, w2);
       }
     }
@@ -1954,16 +1962,21 @@ export class Game {
       const b = pair.bodyB;
       const power = Math.max(a.speed || 0, b.speed || 0);
       if (power < 1.2) continue;
-      const sup = pair.collision?.supports?.[0];
-      const x = sup ? sup.x : (a.position.x + b.position.x) / 2;
-      const y = sup ? sup.y : (a.position.y + b.position.y) / 2;
-      // ぶつかった消しゴムを、くるっと回す（強く当たるほど大きく）
-      const kick = PHYSICS.spin.hitKick * Math.min(1, power / 15);
-      for (const body of [a, b]) {
-        if (body.isStatic || body.label !== 'eraser') continue;
-        const k = kick * (0.5 + Math.random() * 0.5) * (Math.random() < 0.5 ? -1 : 1);
-        Body.setAngularVelocity(body, body.angularVelocity + k);
+      // 当たった 場所：面と 面で 当たった ときは 2点の まん中（片方の 角だけ だと、まっすぐ 当たっても ずれて 見える）
+      const sups = pair.collision?.supports || [];
+      const nSup = Math.min(pair.collision?.supportCount ?? sups.length, sups.length);
+      let x = (a.position.x + b.position.x) / 2;
+      let y = (a.position.y + b.position.y) / 2;
+      if (nSup >= 2 && sups[0] && sups[1]) {
+        x = (sups[0].x + sups[1].x) / 2;
+        y = (sups[0].y + sups[1].y) / 2;
+      } else if (nSup >= 1 && sups[0]) {
+        x = sups[0].x;
+        y = sups[0].y;
       }
+      // 回転：ぶつかった 場所で 回り方が きまる（ランダムでは ない）
+      this._spinHit(a, b, x, y, power);
+      this._spinHit(b, a, x, y, power);
       // とくせい
       const pa = a.plugin?.piece;
       const pb = b.plugin?.piece;
@@ -1977,6 +1990,38 @@ export class Game {
       if (pb) this._traitHit(pb, pa, power, x, y);
       this._emit('hit', { x, y, power, pencil: a.label === 'pencil' || b.label === 'pencil' });
     }
+  }
+
+  /**
+   * ぶつかった ときの 回転（body が other と (x, y) で ぶつかった。ぶつかる 前の 速さで 計算する）
+   * 1. くるっと 回る：当たった 場所が まん中から ずれているほど 大きく 回る。まん中を まっすぐ つかれたら 回らない。
+   *    向きは 当たった 場所と ぶつかってきた 向きで きまる（同じ 当たり方なら いつも 同じ）
+   * 2. 回りながら ぶつかると、こすれて 自分が よこへ それる（回転が 速いほど 大きく）。回転は へる
+   */
+  _spinHit(body, other, x, y, power) {
+    if (body.isStatic || body.label !== 'eraser') return;
+    const S = PHYSICS.spin;
+    const rx = x - body.position.x;
+    const ry = y - body.position.y;
+    const rl = Math.hypot(rx, ry);
+    if (rl < 1e-6) return;
+    const nx = rx / rl; // まん中 → 当たった 場所
+    const ny = ry / rl;
+    const w0 = body.angularVelocity;
+    // 2. 回りながら ぶつかった：よこへ それる（当たった 場所の 表面の 動きと 反対へ）
+    const piece = body.plugin?.piece;
+    if (piece && Math.abs(w0) > 0.03 && (S.hitDeflect ?? 0) > 0) {
+      const surf = w0 * rl * S.hitDeflect; // 表面の 速さ × きき方
+      const cur = piece.pushNext || { x: 0, y: 0 };
+      piece.pushNext = { x: cur.x + ny * surf, y: cur.y - nx * surf };
+    }
+    // 1. くるっと 回る：ぶつかってきた 向き（相手から 見た 速さ）と、当たった 場所の ずれ
+    const vx = other.velocity.x - body.velocity.x;
+    const vy = other.velocity.y - body.velocity.y;
+    const vl = Math.hypot(vx, vy);
+    const lever = vl > 1e-6 ? (nx * vy - ny * vx) / vl : 0; // -1〜1（0 は まん中を まっすぐ）
+    const kick = S.hitKick * Math.min(1, power / 15) * lever;
+    Body.setAngularVelocity(body, w0 * (Math.abs(w0) > 0.03 ? S.hitSpinKeep ?? 1 : 1) + kick);
   }
 
   /**
@@ -3285,6 +3330,7 @@ export class Game {
         reversed: e.reverseNext,
         airborne: e.airborne,
         ...this._flyView(e), // 空中の 見た目（flying・airT・landing）
+        spin: e.alive ? Math.round(e.body.angularVelocity * 100) / 100 : 0, // 回転の 速さ（見た目の 回転の 線）
         power: e.powerNext > 0,
         steamy: this._steamy(e), // ミソシル：湯気で 見えにくい（CPU の ねらいも ズレる）
         inked: e.inked, // ハゴイタンの 墨（ねらいの線が 見えない）
