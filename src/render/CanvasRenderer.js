@@ -232,7 +232,7 @@ export class CanvasRenderer {
     this._drawLabels(ctx, state, now);
     this._drawScreenEffects(ctx, now);
     if (state.desk.autoCamera && this.cam.zoom > 1.1 && !state.blackout) this._drawMinimap(ctx, state);
-    if (aim) this._drawGauge(ctx, aim);
+    if (aim) this._drawGauge(ctx, aim, state);
   }
 
   _drawFloor(ctx) {
@@ -1855,7 +1855,7 @@ export class CanvasRenderer {
     ctx.restore();
   }
 
-  _drawGauge(ctx, aim) {
+  _drawGauge(ctx, aim, state) {
     if (aim.strength <= 0) return;
     const bw = Math.min(260, this.w * 0.6);
     const bh = 16;
@@ -1874,7 +1874,11 @@ export class CanvasRenderer {
     ctx.textBaseline = 'bottom';
     ctx.fillStyle = 'white';
     let label = aim.strength >= 1 ? '強さ MAX！' : '強さ';
-    if (Math.abs(aim.spin || 0) > 0.01) label += '　回転 ' + (aim.spin > 0 ? '↻' : '↺');
+    // ハンドスピナー：止まっているときは、横から 引けているか 見せる（回転の かわりに）
+    const pe = state?.erasers?.[aim.playerIndex];
+    if (pe?.trait?.id === 'spinner' && pe.trait.spinLeft === 0) {
+      label += Math.abs(aim.spin || 0) >= (pe.def.trait.respinMin ?? 0.35) ? '　🌀回し直し！' : '　🌀横から 引いて';
+    } else if (Math.abs(aim.spin || 0) > 0.01) label += '　回転 ' + (aim.spin > 0 ? '↻' : '↺');
     ctx.fillText(label, this.w / 2, y - 6);
   }
 }

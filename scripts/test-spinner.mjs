@@ -48,17 +48,33 @@ check('8色 そろっている', SPINNER_ERASERS.length === 8 && SPINNER_ERASERS
     pass(g); // 相手
   }
   check('青：自分の 番 3回で 回転が 止まる', seq.join(',') === '3,2,1,0' && stop === 1, seq.join(','));
-  // 止まったら：弾いた あと シュッと なでると 回し直せる（その 番は へらない）
-  g.flick(0, 0, 1, 0.3);
-  const canRespin = g.canSteer(0) && !!g.turn.curve?.spin;
-  g.steer(0, 1, 0);
+  // 止まったら：まっすぐ 弾いても 回らない。横から 引いて（回転を かけて）弾くと 回し直せる（その 番は へらない）
+  g.flick(0, 0, 1, 0.3, 0);
   run(g);
-  check('止まったら シュッと なでて 回し直せる', canRespin && e.spinLeft === 3, `のこり${e.spinLeft}`);
-  // 回っている 間は 回し直しは 出ない
+  const still = e.spinLeft === 0 && g.spinStopped(0);
   pass(g);
-  g.flick(0, 0, 1, 0.3);
-  check('回っている 間は 回し直しは いらない', !g.turn.curve?.spin);
+  let re = 0;
+  g.on('trait', (t) => t.type === 'respin' && re++);
+  g.flick(0, 0, 1, 0.3, 0.6);
   run(g);
+  check('止まったら まっすぐでは 回らず、横から 引いて 弾くと 回し直せる', still && re === 1 && e.spinLeft === 3, `のこり${e.spinLeft}`);
+}
+{
+  // 回っている 間は 横から 引いても 回し直しに ならない（へるだけ）
+  const g = make('spinner-blue');
+  let re = 0;
+  g.on('trait', (t) => t.type === 'respin' && re++);
+  g.flick(0, 0, 1, 0.3, 0.8);
+  run(g);
+  check('回っている 間は 回し直しに ならない', re === 0 && g.erasers[0].spinLeft === 2, `のこり${g.erasers[0].spinLeft}`);
+}
+{
+  // CPU は 止まったら いつも 回し直す
+  const players = ['spinner-blue', 'white-standard'].map((id, i) => ({ name: 'P' + i, type: i === 0 ? 'cpu' : 'human', eraser: findEraser(id), color: '' }));
+  const g = new Game({ desk: findDesk('giant'), players, firstTurn: 0 });
+  g.erasers[0].spinLeft = 0;
+  g.flick(0, 0, 1, 0.3, 0);
+  check('CPU は 止まったら いつも 回し直す', g.erasers[0].spinLeft === 3);
 }
 {
   const g = make('spinner-red');

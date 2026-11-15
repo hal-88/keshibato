@@ -875,6 +875,13 @@ export class Game {
         this._emit('trait', { type: 'topTired', playerIndex, x: e.body.position.x, y: e.body.position.y });
       }
     }
+    // ハンドスピナー：回転が 止まっていたら、横から 引いて（回転を かけて）弾くと 回し直せる（CPU は いつも 回し直す）
+    if (t.id === 'spinner' && e.spinLeft <= 0 && (Math.abs(spin) >= (t.respinMin ?? 0.35) || this.players[playerIndex].type === 'cpu')) {
+      e.spinLeft = t.turns ?? 3;
+      this.turn.respun = true; // この 番の おわりには へらさない
+      this._spinState(e);
+      this._emit('trait', { type: 'respin', playerIndex, x: e.body.position.x, y: e.body.position.y });
+    }
     const v = s * e.maxSpeed * this.turn.powerMul * this._spinPower(e) * (e.dicePower || 1) * (t.id === 'yut' ? e.yutPower || 1 : 1) * (t.id === 'shagai' ? this._shagaiFace(e).power ?? 1 : 1); // ユンノの 目・シャガインの 面
     Body.setVelocity(e.body, { x: ux * v, y: uy * v });
     const spinScale = t.id === 'spinny' ? t.spinScale ?? 1.7 : 1;
@@ -913,12 +920,8 @@ export class Game {
     }
     // カーリン：動いている 間に 1回だけ ブラシ（画面を さわる）
     if (t.id === 'curling' && !this.turn.curve) this.turn.curve = { budgetMs: 4000, accel: 0, turnsLeft: 1, brush: true };
-    if (t.id === 'spinner') {
-      // ハンドスピナー：回転が 止まっていたら、弾いたあと 画面を シュッと なでると 回し直せる
-      if (e.spinLeft <= 0 && !this.turn.curve) this.turn.curve = { budgetMs: t.respinMs ?? 2500, accel: 0, turnsLeft: 1, brush: true, spin: true };
-      // 黄：弾いた 直後だけ 一瞬 速い（そのあと すぐ 遅くなる）
-      if (t.color === 'yellow' && this._spinning(e)) e.dashEnd = this.time + (t.dashMs ?? 260);
-    }
+    // ハンドスピナー（黄）：弾いた 直後だけ 一瞬 速い（そのあと すぐ 遅くなる）
+    if (t.id === 'spinner' && t.color === 'yellow' && this._spinning(e)) e.dashEnd = this.time + (t.dashMs ?? 260);
     if (t.id === 'top' && e.topFlicks > (t.turns ?? 3)) w *= 0.3; // コマワール：回転が 止まった
     // ロケッター：強く弾くと まっすぐ突進
     if (t.id === 'rocket' && s >= (t.minPower ?? 0.8) && !backfire) {
@@ -1049,17 +1052,6 @@ export class Game {
     if (l > 1e-6 && !this.turn.steer && c.turnsLeft != null) {
       if (c.turnsLeft <= 0) return; // ソフトメン：曲がれるのは 2回まで
       c.turnsLeft--;
-      if (c.spin) {
-        // ハンドスピナー：シュッ！ で 回し直す
-        const e = this.erasers[playerIndex];
-        const t = traitOf(e);
-        e.spinLeft = t.turns ?? 3;
-        this.turn.respun = true; // この 番の おわりには へらさない
-        this._spinState(e);
-        c.budgetMs = 0;
-        this._emit('trait', { type: 'respin', playerIndex, x: e.body.position.x, y: e.body.position.y });
-        return;
-      }
       if (c.brush) {
         // カーリン：ブラシで こする（曲げない。すべりが よくなる）
         const e = this.erasers[playerIndex];
@@ -2415,6 +2407,12 @@ export class Game {
       default:
         break;
     }
+  }
+
+  /** i 番目の人の ハンドスピナーが 止まっているか（画面の 説明用） */
+  spinStopped(i) {
+    const e = this.erasers[i];
+    return !!e && traitOf(e).id === 'spinner' && e.spinLeft <= 0;
   }
 
   /** ハンドスピナーが 回っているか */

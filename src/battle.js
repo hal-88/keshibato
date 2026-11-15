@@ -253,6 +253,8 @@ export function createBattle(root, { desk, players, onEnd, onQuit, label = '', h
       setHint('🔋 パワーが たまった！ 2倍の強さで 弾けるよ');
     } else if (game.isConfused(game.turnIndex)) {
       setHint('🍓 混乱中！ 5回に1回くらい、反対に 弱く 飛んじゃうよ');
+    } else if (game.spinStopped(game.turnIndex)) {
+      setHint('🌀 回転が 止まっている！ 横から 引いて 弾くと 回し直せるよ');
     } else if (game.extrasOf(game.turnIndex).length) {
       setHint('2つに分かれているよ。弾くほうを 触ってね');
     } else {
@@ -458,9 +460,7 @@ export function createBattle(root, { desk, players, onEnd, onQuit, label = '', h
     if (game.players[playerIndex].type === 'human') {
       flickedOnce.add(playerIndex);
       setHint(
-        game.turn.curve?.spin
-          ? '🌀 画面を シュッと なでると 回し直せるよ！'
-          : game.turn.curve?.brush
+        game.turn.curve?.brush
             ? '動いている間に 画面を さわると ブラシで のびるよ！'
             : game.turn.curve
               ? '画面をなぞると 曲がるよ！'
@@ -648,7 +648,7 @@ export function createBattle(root, { desk, players, onEnd, onQuit, label = '', h
       renderer.addEffect({ type: 'ring', x, y, color: '#80d8ff', dur: 500, r: 20, grow: 50 });
       say('🌀 シュッ！ 回し直した！', '#4fc3f7', 22, 1200);
     } else if (type === 'spinStop') {
-      say('🌀 回転が 止まった…（弾いたあと シュッと なでると 回し直せる）', '#90a4ae', 16, 1600);
+      say('🌀 回転が 止まった…（次は 横から 引いて 弾くと 回し直せる）', '#90a4ae', 16, 1800);
     } else if (type === 'freeze') {
       sfx.boing();
       renderer.addEffect({ type: 'ring', x, y, color: '#b3e5fc', dur: 600, r: 24, grow: 40 });
@@ -1195,8 +1195,6 @@ export function createBattle(root, { desk, players, onEnd, onQuit, label = '', h
 
     // CPU のカーブ：ねらった相手のほうへ曲げる
     const cur = game.players[game.turnIndex];
-    // CPU の ハンドスピナー：回転が 止まっていたら 回し直す
-    if (cur.type === 'cpu' && game.canSteer(game.turnIndex) && game.turn.curve?.spin) game.steer(game.turnIndex, 1, 0);
     if (cur.type === 'cpu' && game.canSteer(game.turnIndex) && cpuSteerTarget >= 0) {
       const me = posOf(game.turnIndex);
       const t = posOf(cpuSteerTarget);
