@@ -224,7 +224,7 @@ export const collection = {
    * @returns {{ def, kind: 'new'|'kira'|'shard', shards: number, ticketBack: boolean, forced: boolean } | null}
    *   new … はじめて／kira … 2回目（キラに なった）／shard … 3回目から（かけら +1。5こで チケット1枚）
    */
-  pullGacha(mode = 'normal') {
+  pullGacha(mode = 'normal', { rareUp = false } = {}) {
     const c = GAME.collection;
     const pool = collection.gachaPool(mode);
     if (data.tickets < 1 || !pool.items.length) return null;
@@ -236,6 +236,13 @@ export const collection = {
       const muk = list.filter(isMukashi);
       const rest = list.filter((e) => !isMukashi(e));
       if (muk.length && rest.length) list = Math.random() < c.mukashi.offChance ? muk : rest;
+    }
+    // 10連の さいごの 1回：レア以上 かくてい（それまでに 出ていなければ）
+    if (rareUp) {
+      const up = list.filter((e) => (e.rarity || 'normal') !== 'normal');
+      const upAll = (forced ? pool.fresh : pool.items).filter((e) => (e.rarity || 'normal') !== 'normal');
+      if (up.length) list = up;
+      else if (upAll.length) list = upAll;
     }
     const def = pickByRarity(list);
     data.tickets--;
@@ -265,6 +272,23 @@ export const collection = {
     }
     save();
     return { def, kind, shards: data.shards || 0, ticketBack, forced };
+  },
+
+  /**
+   * 10連ガチャ：チケット10枚で 10回。レア以上が 1こも 出なければ、さいごの 1回は レア以上 かくてい
+   * @returns 10この pullGacha の 結果（チケットが たりなければ null）
+   */
+  pullGacha10(mode = 'normal') {
+    const n = GAME.collection.tenPull;
+    if (data.tickets < n || !collection.gachaPool(mode).items.length) return null;
+    const out = [];
+    for (let i = 0; i < n; i++) {
+      const rareUp = i === n - 1 && !out.some((r) => (r.def.rarity || 'normal') !== 'normal');
+      const r = collection.pullGacha(mode, { rareUp });
+      if (!r) break;
+      out.push(r);
+    }
+    return out;
   },
 
   bestStreak: () => data.bestStreak || 0,

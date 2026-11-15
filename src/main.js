@@ -1231,6 +1231,8 @@ function showGacha(mode = lastGachaMode || (isMukashiSeason() ? 'mukashi' : 'nor
        <button class="gacha-arrow" data-go="1" ${mi < modes.length - 1 ? '' : 'disabled'} aria-label="次の ガチャ">▶</button>
      </div>`;
   const canPull = tickets > 0 && pool.items.length > 0;
+  const TEN = GAME.collection.tenPull;
+  const canPull10 = tickets >= TEN && pool.items.length > 0;
   const toNew = collection.pullsToNew(mode);
   const capsules = Array.from({ length: 16 }, (_, i) => {
     // 下からつみあがるように、少しずつずらして並べる
@@ -1266,6 +1268,10 @@ function showGacha(mode = lastGachaMode || (isMukashiSeason() ? 'mukashi' : 'nor
      </div>
      ${toNew != null ? `<p class="note gacha-pity">${toNew === 1 ? '🌟 つぎは かならず 新しいのが出る！' : `あと ${toNew}回で かならず 新しいのが出る`}</p>` : ''}
      <p class="note gacha-msg">${msg}</p>
+     <button class="ten-btn" data-act="pull10" ${canPull10 ? '' : 'disabled'}>
+       <b>🎰 10連ガチャ</b>
+       <small>${canPull10 ? `🎫${TEN}枚で ${TEN}回・レア以上 1こ かくてい！` : `🎫 チケット ${TEN}枚で 引けるよ（あと ${TEN - tickets}枚）`}</small>
+     </button>
      <div class="row">
        <button class="btn ghost" data-act="back">戻る</button>
        <button class="btn" data-act="zukan">📖 図鑑</button>
@@ -1378,7 +1384,128 @@ function showGacha(mode = lastGachaMode || (isMukashiSeason() ? 'mukashi' : 'nor
     }, 2500);
   };
 
-  function reveal({ def, kind, shards, ticketBack }) {
+  // ---- 🎰 10連ガチャ ----
+  el.querySelector('[data-act=pull10]').onclick = () => {
+    const results = collection.pullGacha10(mode);
+    if (!results?.length) return;
+    busy = true;
+    handle.disabled = true;
+    el.querySelectorAll('button').forEach((b) => (b.disabled = true));
+    const msg = el.querySelector('.gacha-msg');
+    const machine = el.querySelector('.gacha-machine');
+    const dome = el.querySelector('.gacha-dome');
+    // 1) ハンドルを まわす（1回より はやく・はげしく）
+    handle.classList.add('spin');
+    dome.classList.add('mixing');
+    machine.classList.add('shaking');
+    msg.textContent = 'ガチャガチャガチャ…！';
+    for (let k = 0; k < 10; k++) setTimeout(() => sfx.tap(), k * 140);
+    setTimeout(() => sfx.whoosh(), 300);
+    // 2) カプセルが 10こ ならぶ
+    setTimeout(() => showTen(results), 1500);
+  };
+
+  const RANK = { normal: 0, rare: 1, superrare: 2, ultra: 3, legend: 4 };
+  function showTen(results) {
+    const normalColors = CAPSULE_COLORS.filter((c) => c !== '#ffd166');
+    const best = results.reduce((a, r) => Math.max(a, RANK[r.def.rarity || 'normal'] || 0), 0);
+    const bestR = Object.keys(RANK).find((k) => RANK[k] === best);
+    const stage = document.createElement('div');
+    stage.className = `cap-stage ten-stage r-${bestR}`;
+    stage.innerHTML = `
+      <div class="cap-rays"></div>
+      <div class="ten-title">🎰 10連ガチャ！</div>
+      <div class="ten-grid">
+        ${results
+          .map((r, i) => {
+            const rr = r.def.rarity || 'normal';
+            return `<div class="ten-cell" style="--i:${i}">
+              <button class="cap-big cap-mini r-${rr}" style="--c:${normalColors[i % normalColors.length]}" aria-label="開ける"><i class="cap-top"></i><i class="cap-bot"></i></button>
+            </div>`;
+          })
+          .join('')}
+      </div>
+      <p class="cap-msg ten-msg">${CAPSULE_HINT[bestR] || ''}タップで 全部 開ける！</p>
+      <div class="ten-sum"></div>
+      <button class="btn primary ten-ok hidden" data-act="tenOk">OK</button>`;
+    el.appendChild(stage);
+    sfx.whoosh();
+    if (best > 0) setTimeout(() => sfx.rare(), 400);
+    // 開く：1こずつ 順番に。開いている とちゅうで タップしたら のこりを 一気に（とばす）
+    let opening = false;
+    let finished = false;
+    const timers = [];
+    const shown = new Set();
+    const cells = [...stage.querySelectorAll('.ten-cell')];
+    const showCard = (i) => {
+      if (shown.has(i)) return;
+      shown.add(i);
+      const r = results[i];
+      const def = r.def;
+      const badge = { new: '<span class="ten-badge new">NEW!</span>', kira: '<span class="ten-badge kira">✨キラ</span>', shard: '<span class="ten-badge shard">🧩</span>' }[r.kind];
+      cells[i].innerHTML = `<button class="ten-card ${rarityClass(def)}" data-i="${i}">
+          ${badge}
+          <canvas></canvas>
+          <span class="ten-name">${r.kind === 'kira' ? '✨' : ''}${def.name}</span>
+        </button>`;
+      whenFonts(() => drawEraserPreview(cells[i].querySelector('canvas'), def, -0.18, { kira: r.kind === 'kira' }));
+    };
+    const finish = () => {
+      if (finished) return;
+      finished = true;
+      timers.forEach(clearTimeout);
+      results.forEach((_, i) => showCard(i));
+      const count = (k) => results.filter((r) => r.kind === k).length;
+      const back = results.filter((r) => r.ticketBack).length;
+      stage.querySelector('.ten-sum').innerHTML =
+        `<span>NEW <b>${count('new')}</b></span><span>✨キラ <b>${count('kira')}</b></span><span>🧩かけら <b>${count('shard')}</b></span>` +
+        (back ? `<span class="ten-back">🎫 かけらで チケット +${back}</span>` : '');
+      stage.querySelector('.ten-ok').classList.remove('hidden');
+      stage.querySelector('.ten-msg').textContent = 'さわると くわしく 見られるよ';
+      if (count('new')) sfx.rare();
+    };
+    const openAll = () => {
+      if (opening) return;
+      opening = true;
+      stage.querySelector('.ten-msg').textContent = 'タップで とばせるよ';
+      cells.forEach((cell, i) => {
+        timers.push(
+          setTimeout(() => {
+            const rr = results[i].def.rarity || 'normal';
+            cell.querySelector('.cap-mini')?.classList.add('open');
+            sfx.flip();
+            if (rr !== 'normal') timers.push(setTimeout(() => sfx.rare(), 120));
+            timers.push(setTimeout(() => showCard(i), 280));
+          }, i * 220),
+        );
+      });
+      timers.push(setTimeout(finish, results.length * 220 + 500)); // 3) まとめ
+    };
+    stage.addEventListener('click', (e) => {
+      if (!opening) {
+        openAll();
+        return;
+      }
+      if (!finished) {
+        finish(); // とちゅうで タップ：のこりを 一気に（カードの くわしい 画面は 全部 開いてから）
+        return;
+      }
+      const card = e.target.closest('.ten-card');
+      if (card) {
+        reveal(results[Number(card.dataset.i)], () => {}); // くわしく（とじたら 10連の 画面に もどる）
+        return;
+      }
+      if (e.target.closest('[data-act=tenOk]')) {
+        stage.remove();
+        showGacha(mode);
+        return;
+      }
+      openAll();
+    });
+    setTimeout(openAll, 3500); // さわらなくても 開く
+  }
+
+  function reveal({ def, kind, shards, ticketBack }, onClose = () => showGacha(mode)) {
     setTimeout(() => sfx.rare(), 300);
     const extra = { superrare: 1, ultra: 2, legend: 3 }[def.rarity] || 0; // レアなほど キラキラが ふえる
     for (let k = 0; k < extra; k++) setTimeout(() => sfx.rare(), 700 + k * 380);
@@ -1391,13 +1518,15 @@ function showGacha(mode = lastGachaMode || (isMukashiSeason() ? 'mukashi' : 'nor
         ? `🎫 かけらが ${GAME.collection.shardsPerTicket}こ たまって、チケット1枚に なった！`
         : `かけら ${shards} / ${GAME.collection.shardsPerTicket}（${GAME.collection.shardsPerTicket}こで チケット1枚）`,
     }[kind];
+    // その 回で 出た 見た目（10連で あとから キラに なっても、NEW の ときは ふつうに 見せる）
+    const kiraLook = kind !== 'new' && collection.isKira(def.id);
     const ov = openModal(
       el,
       `<div class="modal detail reveal ${rarityClass(def)}">
          ${rarityTag(def)}
          ${head}
          <canvas class="detail-eraser"></canvas>
-         <div class="detail-name">${collection.isKira(def.id) ? '✨' : ''}${def.name}</div>
+         <div class="detail-name">${kiraLook ? '✨' : ''}${def.name}</div>
          <div class="detail-desc">${def.desc}</div>
          ${kind === 'new' ? traitLine(def) : ''}
          ${kind === 'new' ? `<div class="stats">${statMeters(def.stats)}</div>` : ''}
@@ -1406,10 +1535,11 @@ function showGacha(mode = lastGachaMode || (isMukashiSeason() ? 'mukashi' : 'nor
        </div>`,
     );
     ov.querySelector('.modal').classList.add('meters-in');
+    ov.style.zIndex = '40'; // 10連の 画面より 前に
     const cv = ov.querySelector('canvas');
-    whenFonts(() => drawEraserPreview(cv, def, -0.18, { kira: collection.isKira(def.id) }));
+    whenFonts(() => drawEraserPreview(cv, def, -0.18, { kira: kiraLook }));
     // キラは キラキラが うごくように 少しのあいだ かきなおす
-    if (collection.isKira(def.id)) {
+    if (kiraLook) {
       const t0 = performance.now();
       const loop = () => {
         if (!cv.isConnected || performance.now() - t0 > 20000) return;
@@ -1419,7 +1549,10 @@ function showGacha(mode = lastGachaMode || (isMukashiSeason() ? 'mukashi' : 'nor
       requestAnimationFrame(loop);
     }
     ov.addEventListener('click', (e) => {
-      if (e.target === ov || e.target.closest('[data-act=close]')) showGacha(mode);
+      if (e.target === ov || e.target.closest('[data-act=close]')) {
+        ov.remove();
+        onClose();
+      }
     });
   }
 }

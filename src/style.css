@@ -4099,3 +4099,201 @@ canvas.board {
   70% { transform: scale(1.15); opacity: 1; }
   100% { transform: scale(1); }
 }
+
+/* 🎰 10連ガチャ */
+.ten-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  width: min(320px, 86vw);
+  padding: 10px 14px;
+  border: none;
+  border-radius: 18px;
+  background: linear-gradient(180deg, #ffd45c, #ffb300);
+  box-shadow: 0 5px 0 #c98a00, 0 8px 14px rgba(201, 138, 0, 0.25);
+  color: #5a3a00;
+  font: inherit;
+  cursor: pointer;
+}
+.ten-btn b {
+  font-size: 20px;
+  font-weight: 800;
+}
+.ten-btn small {
+  font-size: 12px;
+  font-weight: 700;
+}
+.ten-btn:active:not(:disabled) {
+  transform: translateY(4px);
+  box-shadow: 0 1px 0 #c98a00;
+}
+.ten-btn:disabled {
+  background: #eee6d6;
+  box-shadow: 0 4px 0 #d6cbb6;
+  color: #9a8c76;
+  cursor: default;
+}
+.ten-stage {
+  gap: 14px;
+  padding: 16px;
+  background: rgba(20, 20, 35, 0.86);
+}
+.ten-title {
+  position: relative;
+  z-index: 2;
+  color: #fff;
+  font-weight: 800;
+  font-size: 24px;
+  text-shadow: 0 3px 0 rgba(0, 0, 0, 0.3);
+}
+.ten-grid {
+  position: relative;
+  z-index: 2;
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 10px;
+  width: min(560px, 100%);
+}
+@media (max-width: 520px) {
+  .ten-grid {
+    gap: 6px;
+  }
+}
+/* 10連の カード：レア度の わく */
+.ten-card.r-rare {
+  box-shadow: 0 0 0 3px #ffc107, 0 0 12px #ffd54f;
+}
+.ten-card.r-superrare {
+  box-shadow: 0 0 0 3px #fff, 0 0 0 5px #c77dff, 0 0 16px #ff80ab;
+}
+.ten-card.r-ultra {
+  box-shadow: 0 0 0 3px #7c4dff, 0 0 16px #00e5ff;
+}
+.ten-card.r-legend {
+  box-shadow: 0 0 0 3px #ffd54f, 0 0 0 5px #000, 0 0 20px #ff8f00;
+}
+.ten-cell {
+  display: grid;
+  place-items: center;
+  aspect-ratio: 3 / 4;
+  min-width: 0;
+}
+.cap-big.cap-mini {
+  width: min(64px, 15vw);
+  height: min(64px, 15vw);
+  animation: tenIn 0.45s cubic-bezier(0.3, 1.5, 0.5, 1) both, capWiggle 1s ease-in-out infinite;
+  animation-delay: calc(var(--i) * 0.07s), calc(0.5s + var(--i) * 0.07s);
+}
+.cap-mini .cap-top,
+.cap-mini .cap-bot {
+  border-width: 3px;
+}
+.cap-mini .cap-top {
+  border-radius: 40px 40px 0 0;
+  box-shadow: inset 6px 6px 0 rgba(255, 255, 255, 0.3);
+}
+.cap-mini .cap-bot {
+  border-top-width: 3px;
+  border-radius: 0 0 40px 40px;
+  box-shadow: inset -4px -4px 0 rgba(0, 0, 0, 0.06);
+}
+.ten-cell .cap-big.open {
+  animation: none;
+}
+@keyframes tenIn {
+  from { transform: translateY(-40vh) scale(0.4) rotate(-200deg); opacity: 0; }
+}
+.ten-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  width: 100%;
+  height: 100%;
+  padding: 6px 2px 4px;
+  border: none;
+  border-radius: 12px;
+  background: #fff;
+  box-shadow: 0 3px 0 rgba(0, 0, 0, 0.25);
+  font: inherit;
+  cursor: pointer;
+  animation: tenPop 0.35s cubic-bezier(0.3, 1.6, 0.5, 1);
+}
+.ten-card {
+  overflow: visible;
+  min-width: 0;
+}
+.ten-card canvas {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  height: auto;
+  aspect-ratio: 4 / 3;
+  min-height: 0;
+}
+.ten-name {
+  font-size: 11px;
+  font-weight: 800;
+  color: var(--ink);
+  line-height: 1.15;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ten-badge {
+  position: absolute;
+  top: -7px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 1px 6px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 800;
+  white-space: nowrap;
+  z-index: 1;
+}
+.ten-badge.new {
+  background: #ff3d6e;
+  color: #fff;
+}
+.ten-badge.kira {
+  background: linear-gradient(90deg, #ffd54f, #ff80ab, #80d8ff);
+  color: #5a3a00;
+}
+.ten-badge.shard {
+  background: #fff;
+  box-shadow: 0 0 0 1px #ddd;
+}
+@keyframes tenPop {
+  from { transform: scale(0.3); opacity: 0; }
+}
+.ten-msg {
+  position: relative;
+  z-index: 2;
+  min-height: 1.4em;
+}
+.ten-sum {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px 14px;
+  color: #fff;
+  font-weight: 800;
+  font-size: 15px;
+}
+.ten-sum b {
+  font-size: 20px;
+}
+.ten-back {
+  color: #ffe082;
+}
+.ten-ok {
+  position: relative;
+  z-index: 2;
+  min-width: 160px;
+}
