@@ -1517,6 +1517,72 @@ export const SPECIAL_ART = {
     }
   },
 
+  // ハンドスピナー：3つの 羽根と まん中の 軸。回っている 間は くるくる 回って 見える（色で 能力が ちがう）
+  spinner(ctx, s, look, tv) {
+    const r = s.radius;
+    const c = look.spinColor;
+    const metal = c === 'silver' || c === 'gold';
+    const spinning = !tv || tv.spinning !== false;
+    // 回っている 見た目（白は ゆっくり）
+    const speed = c === 'white' ? 160 : 45;
+    const a = spinning && tv ? now() / speed : 0;
+    ctx.save();
+    ctx.rotate(a);
+    const lobeR = r * 0.4;
+    const lobeD = r * 0.58;
+    // 羽根を つなぐ 本体（3つの 羽根の まるい 形）
+    ctx.beginPath();
+    for (let i = 0; i < 3; i++) {
+      const t = (i / 3) * Math.PI * 2 - Math.PI / 2;
+      ctx.moveTo(Math.cos(t) * lobeD + lobeR, Math.sin(t) * lobeD);
+      ctx.arc(Math.cos(t) * lobeD, Math.sin(t) * lobeD, lobeR, 0, Math.PI * 2);
+    }
+    ctx.moveTo(r * 0.42, 0);
+    ctx.arc(0, 0, r * 0.42, 0, Math.PI * 2);
+    let g = look.body;
+    if (metal) {
+      g = ctx.createLinearGradient(-r, -r, r, r);
+      g.addColorStop(0, c === 'gold' ? '#fff3c4' : '#f5f7f8');
+      g.addColorStop(0.5, look.body);
+      g.addColorStop(1, c === 'gold' ? '#c79100' : '#78909c');
+    }
+    ctx.fillStyle = g;
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(0,0,0,0.35)';
+    ctx.lineWidth = 1.3;
+    ctx.stroke();
+    // 羽根の 中の おもり（ベアリング）
+    for (let i = 0; i < 3; i++) {
+      const t = (i / 3) * Math.PI * 2 - Math.PI / 2;
+      const x = Math.cos(t) * lobeD;
+      const y = Math.sin(t) * lobeD;
+      circle(ctx, x, y, lobeR * 0.62);
+      fill(ctx, '#cfd8dc');
+      circle(ctx, x, y, lobeR * 0.62);
+      line(ctx, 'rgba(0,0,0,0.3)', 1);
+      circle(ctx, x - lobeR * 0.15, y - lobeR * 0.15, lobeR * 0.18);
+      fill(ctx, 'rgba(255,255,255,0.8)');
+    }
+    ctx.restore();
+    // まん中の 軸（回らない）
+    circle(ctx, 0, 0, r * 0.26);
+    fill(ctx, metal ? '#eceff1' : '#fafafa');
+    circle(ctx, 0, 0, r * 0.26);
+    line(ctx, 'rgba(0,0,0,0.35)', 1.2);
+    circle(ctx, 0, 0, r * 0.12);
+    fill(ctx, look.body);
+    // 回っている しるし（まわりの 線）
+    if (spinning && tv) {
+      ctx.strokeStyle = c === 'white' ? 'rgba(179,229,252,0.9)' : c === 'gold' ? 'rgba(255,236,130,0.95)' : 'rgba(255,255,255,0.75)';
+      ctx.lineWidth = 2;
+      for (let i = 0; i < 2; i++) {
+        ctx.beginPath();
+        ctx.arc(0, 0, r * 1.08, a * 1.3 + i * Math.PI, a * 1.3 + i * Math.PI + 1.1);
+        ctx.stroke();
+      }
+    }
+  },
+
   // メンコン：丸めんこ。「武」の字
   menko(ctx, s, look) {
     const r = s.radius;

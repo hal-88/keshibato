@@ -4297,3 +4297,158 @@ canvas.board {
   z-index: 2;
   min-width: 160px;
 }
+
+/* 📅 出席カード（ログインボーナス） */
+.stamp-card {
+  width: min(400px, 94vw);
+  background: #fffdf6;
+  border-radius: 20px;
+  padding: 16px;
+  text-align: center;
+  background-image:
+    linear-gradient(var(--line) 1px, transparent 1px),
+    linear-gradient(90deg, var(--line) 1px, transparent 1px);
+  background-size: 20px 20px;
+  box-shadow: 0 4px 0 rgba(0, 0, 0, 0.15);
+}
+.sc-head {
+  font-weight: 800;
+  font-size: 20px;
+  margin-bottom: 10px;
+}
+.sc-head small {
+  display: block;
+  font-size: 12px;
+  color: var(--sub);
+}
+.sc-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.sc-cell {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  min-height: 70px;
+  border: 2px dashed #d8ccb6;
+  border-radius: 12px;
+  background: #fff;
+}
+.sc-cell small {
+  font-size: 11px;
+  font-weight: 800;
+  color: var(--sub);
+}
+.sc-prize {
+  font-size: 18px;
+  font-weight: 800;
+}
+.sc-cell.spin {
+  border-color: #4fc3f7;
+  background: #f1faff;
+}
+.sc-cell.last {
+  grid-column: span 2;
+  border-color: #ffb300;
+  background: #fff8e1;
+}
+.sc-cell.done {
+  border-style: solid;
+}
+.sc-stamp {
+  position: absolute;
+  inset: 50% auto auto 50%;
+  transform: translate(-50%, -50%) rotate(-14deg);
+  display: grid;
+  place-items: center;
+  width: 50px;
+  height: 50px;
+  border: 3px solid #e53935;
+  border-radius: 50%;
+  color: #e53935;
+  font-weight: 800;
+  font-size: 14px;
+  background: rgba(255, 255, 255, 0.55);
+  opacity: 0.9;
+}
+.sc-cell.last .sc-stamp {
+  border: none;
+  background: none;
+  font-size: 40px;
+}
+.sc-cell.today .sc-stamp {
+  animation: scStamp 0.45s cubic-bezier(0.3, 1.6, 0.5, 1) 0.35s both;
+}
+@keyframes scStamp {
+  from { transform: translate(-50%, -50%) rotate(-14deg) scale(2.6); opacity: 0; }
+}
+.sc-reward {
+  margin: 4px 0 10px;
+  animation: fadeIn 0.3s ease-out 0.6s both;
+}
+.sc-r-head {
+  font-weight: 800;
+  font-size: 16px;
+}
+.sc-spinner {
+  display: block;
+  width: 120px;
+  height: 120px;
+  margin: 2px auto;
+}
+.sc-spinner.pop {
+  animation: tenPop 0.4s cubic-bezier(0.3, 1.6, 0.5, 1);
+}
+.sc-r-name {
+  font-size: 18px;
+}
+.sc-r-trait {
+  margin-top: 4px;
+  font-size: 13px;
+  color: var(--sub);
+  text-align: left;
+  background: #fff;
+  border-radius: 10px;
+  padding: 6px 10px;
+}
+.sc-new {
+  display: inline-block;
+  margin-right: 6px;
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: #ff3d6e;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 800;
+}
+.sc-big {
+  font-size: 26px;
+  font-weight: 800;
+  margin: 8px 0;
+}
+.sc-done {
+  font-weight: 800;
+  color: #e08a00;
+}
+.ttl-icon span {
+  position: relative;
+}
+.ttl-new {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #ff3d6e;
+  color: #fff;
+  font-size: 12px;
+  font-style: normal;
+  font-weight: 800;
+  line-height: 18px;
+}

@@ -1102,6 +1102,71 @@ export const ERASERS = [
     },
   },
 
+  // ---- ハンドスピナー（ログインボーナス 限定。しゅっせきカードの 1日目に ランダムで 1つ。色で 能力が ちがう） ----
+  // 全色 共通：回っている 間は 当たった 相手を はじく。回転は 自分の 番 3回で 止まる。
+  //            止まったら、弾いた あと 画面を シュッと なでると 回し直せる（Game.js の 'spinner'）
+  ...[
+    {
+      color: 'red', name: 'ホノオスピナー', rarity: 'normal', body: '#e53935', img: 'ほのお',
+      stats: { power: 3, balance: 2, speed: 4 },
+      tname: 'ほのおの 回転', tdesc: '回っている 間は 当てる 力が 強い（相手を 大きく はじく）。でも 回転が 早く 止まる（2回）',
+      p: { turns: 2, push: 0.3, max: 4.5 },
+    },
+    {
+      color: 'blue', name: 'ミズスピナー', rarity: 'normal', body: '#1e88e5', img: 'みず',
+      stats: { power: 3, balance: 2, speed: 4 },
+      tname: 'みずの 回転', tdesc: '回っている 間は よく すべって 遠くまで 進む。でも 止まりにくい',
+      p: { spinSlide: 0.72 },
+    },
+    {
+      color: 'yellow', name: 'カミナリスピナー', rarity: 'normal', body: '#fdd835', img: 'かみなり',
+      stats: { power: 3, balance: 2, speed: 4 },
+      tname: 'かみなりの 回転', tdesc: '回っている 間は、弾いた 直後だけ 一瞬 すごく 速い。でも すぐに 遅くなる',
+      p: { dash: 1.15, dashMs: 260, afterBrake: 1.25 },
+    },
+    {
+      color: 'green', name: 'カゼスピナー', rarity: 'normal', body: '#43a047', img: 'かぜ',
+      stats: { power: 3, balance: 2, speed: 4 },
+      tname: 'かぜの 回転', tdesc: '回りながら 動くと、風で 近くの 相手を 少しずつ 押す。でも 軽くて 飛ばされやすい',
+      p: { range: 110, wind: 0.05, weight: 0.85, fly: 1.15 },
+    },
+    {
+      color: 'white', name: 'コオリスピナー', rarity: 'rare', body: '#e3f2fd', img: 'こおり',
+      stats: { power: 3, balance: 3, speed: 3 },
+      tname: 'こおりの 回転', tdesc: '自分の 番に 当てた 相手を こおらせる（相手の 次の 番が おわるまで すべりやすい）。でも 回転が ゆっくりで はじく 力が 弱い',
+      p: { push: 0.12, max: 2.5, freezeMin: 2, freezeSlide: 0.75, slowSpin: true },
+    },
+    {
+      color: 'black', name: 'ドッシリスピナー', rarity: 'rare', body: '#37474f', img: 'どっしり',
+      stats: { power: 2, balance: 5, speed: 2 },
+      tname: 'どっしり 回転', tdesc: '重くて、回転が 長もち（5回）。でも 動きが おそい',
+      p: { turns: 5, push: 0.15 },
+    },
+    {
+      color: 'silver', name: 'メタルスピナー', rarity: 'superrare', body: '#b0bec5', img: 'メタル',
+      stats: { power: 3, balance: 2, speed: 4 },
+      tname: 'メタルの 回転', tdesc: '回っている 間は 当てられても ほとんど 動かない。でも 回転が 止まると ただの 重り（重くて 弱い）',
+      p: { hold: 0.85, stopMass: 1.35, stopPower: 0.7 },
+    },
+    {
+      color: 'gold', name: 'ヒカリスピナー', rarity: 'ultra', body: '#ffc107', img: 'ひかり',
+      stats: { power: 3, balance: 3, speed: 3 },
+      tname: 'ひかりの 回転', tdesc: '回転が ずっと 止まらない。でも 回転が 強すぎて、まっすぐ 進めず カーブしがち',
+      p: { endless: true, autoSpin: 0.38 },
+    },
+  ].map((c) => ({
+    id: `spinner-${c.color}`,
+    rarity: c.rarity,
+    bonus: true,
+    kind: 'spinner',
+    name: c.name,
+    desc: `${c.img}の ハンドスピナー。くるくる 回る`,
+    shape: { type: 'circle', radius: 27 },
+    look: { art: 'spinner', body: c.body, spinColor: c.color },
+    stats: c.stats,
+    trait: { id: 'spinner', color: c.color, name: c.tname, desc: c.tdesc, turns: 3, ...c.p },
+  })),
+
   // ---- ここから トーナメント優勝 限定（優勝すると 1つ もらえる。どれも 弱点つき。ステータスの合計は9） ----
   {
     id: 'torophin', rarity: 'champion', champion: true,
@@ -1159,7 +1224,9 @@ export const START_ERASER_IDS = ['white-standard'];
 // トーナメント優勝 限定の消しゴム
 export const CHAMPION_ERASERS = ERASERS.filter((e) => e.champion);
 // ふつうの消しゴム（キャラもふくむ。CPU もこの中から選ぶ）と、ガチャ限定の文房具
-export const REGULAR_ERASERS = ERASERS.filter((e) => !e.gacha && !e.champion);
+export const REGULAR_ERASERS = ERASERS.filter((e) => !e.gacha && !e.champion && !e.bonus);
+// ハンドスピナー（ログインボーナス 限定）
+export const SPINNER_ERASERS = ERASERS.filter((e) => e.kind === 'spinner');
 export const GACHA_ERASERS = ERASERS.filter((e) => e.gacha);
 // ガチャの中の、文房具と とくべつ消しゴム（図鑑のページ分け）
 export const STATIONERY_ERASERS = GACHA_ERASERS.filter((e) => !e.kind);

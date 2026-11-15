@@ -114,6 +114,32 @@ export const collection = {
   hasSeen: (id) => data.seen.includes(id),
   hasSeenCard: (id) => data.cardsSeen.includes(id),
   tickets: () => data.tickets,
+  /** チケットを もらう（出席カードなど） */
+  addTickets(n) {
+    data.tickets += n;
+    save();
+  },
+  /** かけらを もらう（5こで チケット1枚に 自動で かわる）。かわった 枚数を かえす */
+  addShards(n) {
+    const per = GAME.collection.shardsPerTicket;
+    data.shards = (data.shards || 0) + n;
+    let back = 0;
+    while (data.shards >= per) {
+      data.shards -= per;
+      data.tickets++;
+      back++;
+    }
+    save();
+    return back;
+  },
+  /** 消しゴムを もらう（出席カードの ハンドスピナーなど）。はじめてなら true */
+  grantEraser(id) {
+    if (data.owned.includes(id)) return false;
+    data.owned.push(id);
+    addUnique(data.seen, [id]);
+    save();
+    return true;
+  },
   wins: () => data.wins,
   /** あと何回たたかうと、チケットがかならずもらえるか */
   matchesToPity: () => Math.max(1, GAME.collection.pityMatches - (data.matchesSinceTicket || 0)),

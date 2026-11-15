@@ -457,7 +457,15 @@ export function createBattle(root, { desk, players, onEnd, onQuit, label = '', h
     }
     if (game.players[playerIndex].type === 'human') {
       flickedOnce.add(playerIndex);
-      setHint(game.turn.curve?.brush ? '動いている間に 画面を さわると ブラシで のびるよ！' : game.turn.curve ? '画面をなぞると 曲がるよ！' : '');
+      setHint(
+        game.turn.curve?.spin
+          ? '🌀 画面を シュッと なでると 回し直せるよ！'
+          : game.turn.curve?.brush
+            ? '動いている間に 画面を さわると ブラシで のびるよ！'
+            : game.turn.curve
+              ? '画面をなぞると 曲がるよ！'
+              : '',
+      );
     }
   });
 
@@ -635,6 +643,16 @@ export function createBattle(root, { desk, players, onEnd, onQuit, label = '', h
       say('🪁 風に 乗った！', '#29b6f6', 18, 1000);
     } else if (type === 'wind') {
       say('ひゅ〜', '#81d4fa', 16, 800);
+    } else if (type === 'respin') {
+      sfx.whoosh();
+      renderer.addEffect({ type: 'ring', x, y, color: '#80d8ff', dur: 500, r: 20, grow: 50 });
+      say('🌀 シュッ！ 回し直した！', '#4fc3f7', 22, 1200);
+    } else if (type === 'spinStop') {
+      say('🌀 回転が 止まった…（弾いたあと シュッと なでると 回し直せる）', '#90a4ae', 16, 1600);
+    } else if (type === 'freeze') {
+      sfx.boing();
+      renderer.addEffect({ type: 'ring', x, y, color: '#b3e5fc', dur: 600, r: 24, grow: 40 });
+      say('❄ カチコチ！', '#81d4fa', 22, 1200);
     } else if (type === 'topTired') {
       say('回転が 止まった…', '#8d6e63', 18, 1200);
     } else if (type === 'menko') {
@@ -1177,6 +1195,8 @@ export function createBattle(root, { desk, players, onEnd, onQuit, label = '', h
 
     // CPU のカーブ：ねらった相手のほうへ曲げる
     const cur = game.players[game.turnIndex];
+    // CPU の ハンドスピナー：回転が 止まっていたら 回し直す
+    if (cur.type === 'cpu' && game.canSteer(game.turnIndex) && game.turn.curve?.spin) game.steer(game.turnIndex, 1, 0);
     if (cur.type === 'cpu' && game.canSteer(game.turnIndex) && cpuSteerTarget >= 0) {
       const me = posOf(game.turnIndex);
       const t = posOf(cpuSteerTarget);

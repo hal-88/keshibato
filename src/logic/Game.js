@@ -330,6 +330,12 @@ export class Game {
       hopLand: false, // ケンパー：着地で 勢いが 落ちる
       dominoUsed: false, // ドミノン
       bambooUsed: false, // バンブー
+      // ハンドスピナー（ログインボーナス）
+      spinLeft: t.id === 'spinner' ? (t.endless ? 99 : t.turns ?? 3) : 0, // 回転が 止まるまでの 自分の番
+      dashEnd: 0, // 黄：一瞬 速い 時間の おわり
+      // こおり（白の スピナーに 当てられた）：自分の番が おわるまで すべりやすい
+      frozen: 0,
+      frozenAt: -1,
     };
     if (e.covered) e.traitMass = t.massScale ?? 1.45;
     if (t.weight) e.traitMass = t.weight; // カラッポ（かるい）・ダイオウケシ（おもい）
@@ -869,7 +875,7 @@ export class Game {
         this._emit('trait', { type: 'topTired', playerIndex, x: e.body.position.x, y: e.body.position.y });
       }
     }
-    const v = s * e.maxSpeed * this.turn.powerMul * (e.dicePower || 1) * (t.id === 'yut' ? e.yutPower || 1 : 1) * (t.id === 'shagai' ? this._shagaiFace(e).power ?? 1 : 1); // ユンノの 目・シャガインの 面
+    const v = s * e.maxSpeed * this.turn.powerMul * this._spinPower(e) * (e.dicePower || 1) * (t.id === 'yut' ? e.yutPower || 1 : 1) * (t.id === 'shagai' ? this._shagaiFace(e).power ?? 1 : 1); // ユンノの 目・シャガインの 面
     Body.setVelocity(e.body, { x: ux * v, y: uy * v });
     const spinScale = t.id === 'spinny' ? t.spinScale ?? 1.7 : 1;
     let w = Math.max(-1, Math.min(1, spin)) * PHYSICS.spin.maxAngular * s * spinScale;
@@ -907,6 +913,12 @@ export class Game {
     }
     // カーリン：動いている 間に 1回だけ ブラシ（画面を さわる）
     if (t.id === 'curling' && !this.turn.curve) this.turn.curve = { budgetMs: 4000, accel: 0, turnsLeft: 1, brush: true };
+    if (t.id === 'spinner') {
+      // ハンドスピナー：回転が 止まっていたら、弾いたあと 画面を シュッと なでると 回し直せる
+      if (e.spinLeft <= 0 && !this.turn.curve) this.turn.curve = { budgetMs: t.respinMs ?? 2500, accel: 0, turnsLeft: 1, brush: true, spin: true };
+      // 黄：弾いた 直後だけ 一瞬 速い（そのあと すぐ 遅くなる）
+      if (t.color === 'yellow' && this._spinning(e)) e.dashEnd = this.time + (t.dashMs ?? 260);
+    }
     if (t.id === 'top' && e.topFlicks > (t.turns ?? 3)) w *= 0.3; // コマワール：回転が 止まった
     // ロケッター：強く弾くと まっすぐ突進
     if (t.id === 'rocket' && s >= (t.minPower ?? 0.8) && !backfire) {
@@ -1037,6 +1049,17 @@ export class Game {
     if (l > 1e-6 && !this.turn.steer && c.turnsLeft != null) {
       if (c.turnsLeft <= 0) return; // ソフトメン：曲がれるのは 2回まで
       c.turnsLeft--;
+      if (c.spin) {
+        // ハンドスピナー：シュッ！ で 回し直す
+        const e = this.erasers[playerIndex];
+        const t = traitOf(e);
+        e.spinLeft = t.turns ?? 3;
+        this.turn.respun = true; // この 番の おわりには へらさない
+        this._spinState(e);
+        c.budgetMs = 0;
+        this._emit('trait', { type: 'respin', playerIndex, x: e.body.position.x, y: e.body.position.y });
+        return;
+      }
       if (c.brush) {
         // カーリン：ブラシで こする（曲げない。すべりが よくなる）
         const e = this.erasers[playerIndex];
@@ -1800,6 +1823,19 @@ export class Game {
           this._emit('trait', { type: et.id === 'kendama' ? 'kendama' : 'tail', playerIndex: e.playerIndex, x: o.body.position.x, y: o.body.position.y });
         }
       }
+      // 緑の スピナー：回りながら 動いている 間、近くの 相手を 風で 少しずつ 押す
+      if (et.id === 'spinner' && et.color === 'green' && motion && e.body.speed > 0.5 && this._spinning(e)) {
+        const R = et.range ?? 110;
+        for (const o of this._allPieces()) {
+          if (!o.alive || o.playerIndex === e.playerIndex || o.body.isStatic) continue;
+          const dx = o.body.position.x - e.body.position.x;
+          const dy = o.body.position.y - e.body.position.y;
+          const d = Math.hypot(dx, dy);
+          if (d > R || d < 1) continue;
+          const a = (et.wind ?? 0.05) * (1 - d / R) * k;
+          Body.setVelocity(o.body, { x: o.body.velocity.x + (dx / d) * a, y: o.body.velocity.y + (dy / d) * a });
+        }
+      }
       // ジシャクン：近くを動いている相手を、すこし 引きよせる
       if (et.id === 'magnet' && (this.phase === 'moving' || this.phase === 'settling')) {
         const R = et.range ?? 150;
@@ -1868,6 +1904,11 @@ export class Game {
       if (t.id === 'edgeGrip' && edgeClearance(this.desk, b.position.x, b.position.y) < (t.range ?? 45)) {
         local *= t.scale ?? 3.5;
       }
+      if (t.id === 'spinner') {
+        if (t.spinSlide && this._spinning(e)) local *= t.spinSlide; // 青：回っていると よく すべる
+        if (t.color === 'yellow' && e.dashEnd && this.time > e.dashEnd && this._isShooter(e)) local *= t.afterBrake ?? 1.7; // 黄：すぐ 遅くなる
+      }
+      if (e.frozen) local *= e.frozen; // 白の スピナーに こおらされた
       b.frictionAir = Math.min(0.5, e.baseFrictionAir * local);
       const brake = k * this.desk.frictionScale * local;
 
@@ -2103,7 +2144,26 @@ export class Game {
       target.pushNext = { x: cur.x + dir.x * amount, y: cur.y + dir.y * amount };
     };
 
+    // こおらされた 消しゴムが 当たっても とくべつな ことは ない（すべりは _applyDeskBrake）
     switch (t.id) {
+      case 'spinner': {
+        // ハンドスピナー
+        const foe = o && o.playerIndex !== e.playerIndex;
+        // 緑：軽いので 当てられると 飛ばされやすい（回っていても いなくても）
+        if (t.color === 'green' && foe && o.body.speed > e.body.speed && power >= 3) e.absorbNext = t.fly ?? 1.15;
+        if (!this._spinning(e) || !foe) break;
+        // 回っている 間は、当たった 相手を はじく（自分から 当たった とき）
+        if (!o.body.isStatic && e.body.speed >= o.body.speed) addPush(o, away(), Math.min(t.max ?? 3.5, Math.max(t.min ?? 0, (t.push ?? 0.2) * power)));
+        // 白：自分の 番に 当てた 相手を こおらせる（相手の 番が おわるまで すべりやすい）
+        if (t.color === 'white' && this._isShooter(e) && power >= (t.freezeMin ?? 2) && !o.body.isStatic) {
+          if (!o.frozen) this._emit('trait', { type: 'freeze', playerIndex: e.playerIndex, x: o.body.position.x, y: o.body.position.y });
+          o.frozen = t.freezeSlide ?? 0.55;
+          o.frozenAt = this.turnCount;
+        }
+        // 銀：回っている 間は 当てられても ほとんど 動かない
+        if (t.color === 'silver' && o.body.speed > e.body.speed && power >= 2) e.absorbNext = t.hold ?? 0.3;
+        break;
+      }
       case 'gather': // マトマール：当たるたびに重くなる
         if (power > 2 && e.traitMass < (t.max ?? 1.6)) {
           e.gathered++;
@@ -2355,6 +2415,28 @@ export class Game {
       default:
         break;
     }
+  }
+
+  /** ハンドスピナーが 回っているか */
+  _spinning(e) {
+    return traitOf(e).id === 'spinner' && e.spinLeft > 0;
+  }
+
+  /** ハンドスピナー：弾く 強さの 倍率（黄は 回っていると 一瞬 速い・銀は 止まると ただの 重り） */
+  _spinPower(e) {
+    const t = traitOf(e);
+    if (t.id !== 'spinner') return 1;
+    if (t.color === 'yellow' && this._spinning(e)) return t.dash ?? 1.3;
+    if (t.color === 'silver' && !this._spinning(e)) return t.stopPower ?? 0.75;
+    return 1;
+  }
+
+  /** ハンドスピナー：回っているか どうかで 重さを かえる（銀は 止まると 重い） */
+  _spinState(e) {
+    const t = traitOf(e);
+    if (t.id !== 'spinner' || t.color !== 'silver') return;
+    e.traitMass = this._spinning(e) ? t.weight ?? 1 : t.stopMass ?? 1.35;
+    this._applyMass(e);
   }
 
   /** e が いま弾いている人の消しゴムか */
@@ -2739,6 +2821,17 @@ export class Game {
 
   _endTurn() {
     const cur = this.erasers[this.turnIndex];
+    // ハンドスピナー：自分の 番が おわるたびに 回転が へる（回し直した 番は へらない）
+    const ct = traitOf(cur);
+    if (ct.id === 'spinner' && cur.alive && this.turn.flicked && !ct.endless && !this.turn.respun && cur.spinLeft > 0) {
+      cur.spinLeft--;
+      if (cur.spinLeft === 0) {
+        this._spinState(cur);
+        this._emit('trait', { type: 'spinStop', playerIndex: this.turnIndex, x: cur.body.position.x, y: cur.body.position.y });
+      }
+    }
+    // こおり：こおらされた 人の 番が おわったら とける
+    for (const pc of [cur, ...this.extrasOf(this.turnIndex)]) if (pc.frozen && pc.frozenAt < this.turnCount) pc.frozen = 0;
     // おもり：自分のターンが終わったら動かなくなる
     if (cur.anchorPending) {
       cur.anchorPending = false;
@@ -2943,6 +3036,9 @@ export class Game {
       reverseNext: e.reverseNext,
       curTurnPos: e.curTurnPos,
       prevTurnPos: e.prevTurnPos,
+      spinLeft: e.spinLeft,
+      frozen: e.frozen,
+      frozenAt: e.frozenAt,
     });
     return {
       v: 1,
@@ -3077,7 +3173,11 @@ export class Game {
         curTurnPos: pk.curTurnPos || { x: pk.x, y: pk.y },
         prevTurnPos: pk.prevTurnPos || null,
         isExtra: pk.extra,
+        spinLeft: pk.spinLeft ?? e.spinLeft,
+        frozen: pk.frozen || 0,
+        frozenAt: pk.frozenAt ?? -1,
       });
+      this._spinState(e);
       if (e.dice) e.dicePower = traitOf(e).faces?.[e.dice - 1]?.power ?? 1;
       if (e.ghost) e.body.collisionFilter.mask = 0;
       if (pk.size && pk.size !== 1) {
@@ -3205,6 +3305,9 @@ export class Game {
         takrawLeft: e.takrawLeft,
         snow: e.snow,
         center: traitOf(e).id === 'petanque' && Math.hypot(e.body.position.x, e.body.position.y) < (traitOf(e).center ?? 95),
+        spinning: this._spinning(e), // ハンドスピナー
+        spinLeft: traitOf(e).endless ? -1 : e.spinLeft,
+        frozen: !!e.frozen, // 白の スピナーに こおらされた
       },
     };
   }

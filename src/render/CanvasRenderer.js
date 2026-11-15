@@ -212,6 +212,7 @@ export class CanvasRenderer {
       drawEraser(ctx, e.def, e.x + jx, e.y + jy, e.angle, { scale: e.size * air, alpha, tv: e.trait, shadow: !e.trait.clear && air === 1 });
       if (e.effects.shield) this._drawShield(ctx, e, now);
       if (e.effects.inked) this._drawInk(ctx, e); // ハゴイタンの 墨で ×
+      if (e.trait.frozen && alpha > 0.5) this._drawFrozen(ctx, e); // 白の スピナーに こおらされた
       if (e.trait.clear && e.trait.camo) this._drawCamo(ctx, e, state.desk);
       // キラ（ガチャで 2回出た）は にじ色に 光る（見た目だけ）
       if (state.players[e.playerIndex]?.kira && alpha > 0.5) drawKira(ctx, e.def, e.x + jx, e.y + jy, e.angle, e.size * air, now);
@@ -871,6 +872,28 @@ export class CanvasRenderer {
   }
 
   // ハゴイタンの 墨で ×（次の番 ねらいの線が 見えない）
+  /** こおっている（白の スピナー）：うすい 水色の こおりと ❄ */
+  _drawFrozen(ctx, e) {
+    const r = eraserExtent(e.def) * e.size;
+    ctx.save();
+    ctx.translate(e.x, e.y);
+    ctx.globalAlpha = 0.45;
+    ctx.fillStyle = '#b3e5fc';
+    ctx.beginPath();
+    ctx.arc(0, 0, r * 1.05, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.globalAlpha = 0.9;
+    ctx.strokeStyle = '#e1f5fe';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+    ctx.globalAlpha = 1;
+    ctx.font = `${Math.round(r * 0.7)}px sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('❄', r * 0.55, -r * 0.55);
+    ctx.restore();
+  }
+
   _drawInk(ctx, e) {
     const r = eraserExtent(e.def) * e.size * 0.75;
     ctx.save();

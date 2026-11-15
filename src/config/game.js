@@ -27,6 +27,16 @@ export const GAME = {
     maxFavorites: 3, // お気に入りの消しゴムの数
     gachaNewEvery: 5, // ガチャで この回数に1回は かならず 持っていないものが出る（ダブりが つづいたとき）
     tenPull: 10, // 10連ガチャ（チケット この枚数で この回数。レア以上 1こ かくてい）
+    // ログインボーナス（出席カード）：1日1回 ハンコ。休んでも リセットしない（合計の 日数で すすむ）。7日で 1まい
+    loginDays: [
+      { type: 'spinner' }, // 1日目：ハンドスピナー（まだ 持っていない 色から ランダム。ぜんぶ あれば チケット1枚）
+      { type: 'shard', n: 1 },
+      { type: 'ticket', n: 1 },
+      { type: 'shard', n: 1 },
+      { type: 'shard', n: 1 },
+      { type: 'shard', n: 1 },
+      { type: 'ticket', n: 2 }, // 7日目：はなまる
+    ],
     shardsPerTicket: 5, // ダブり（3回目から）の かけらが この数で チケット1枚
     streakBonusEvery: 3, // CPU れんしょうチャレンジで、この回数 連勝するごとにボーナスで1枚
     cpuPickLockedChance: 0.6, // CPU が「まだ持っていない消しゴム」を選ぶ確率（出会えるように）

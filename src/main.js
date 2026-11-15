@@ -2,11 +2,12 @@
 
 import './style.css';
 import { DESKS, findDesk } from './config/desks.js';
-import { ERASERS, REGULAR_ERASERS, GACHA_ERASERS, STATIONERY_ERASERS, SPECIAL_ERASERS, KYUSHOKU_ERASERS, MUKASHI_ERASERS, SEKAI_ERASERS, CHAMPION_ERASERS, STAT_LABELS, ERASER_RARITY, findEraser, pickByRarity } from './config/erasers.js';
+import { ERASERS, REGULAR_ERASERS, GACHA_ERASERS, STATIONERY_ERASERS, SPECIAL_ERASERS, KYUSHOKU_ERASERS, MUKASHI_ERASERS, SEKAI_ERASERS, CHAMPION_ERASERS, SPINNER_ERASERS, STAT_LABELS, ERASER_RARITY, findEraser, pickByRarity } from './config/erasers.js';
 import { CARDS, drawRandomCard } from './config/cards.js';
 import { collection, isMukashiSeason, mukashiUntil, gachaModes } from './progress/collection.js';
 import { rating, tierOf } from './progress/rating.js';
 import { startTitleHero } from './ui/titleHero.js';
+import { loginBonus } from './progress/loginBonus.js';
 import { resultActionsHTML, bindResultActions } from './replay/replayUI.js';
 import { getLastReplay, openReplayViewer } from './replay/replayView.js';
 import { plain } from './ui/text.js';
@@ -159,6 +160,7 @@ function showTitle() {
          </button>
        </div>
        <div class="ttl-icons">
+         <button class="ttl-icon" data-act="login"><span>📅${loginBonus.canStamp() ? '<i class="ttl-new">!</i>' : ''}</span>出席</button>
          ${getLastReplay() ? '<button class="ttl-icon" data-act="review"><span>🎬</span>ふりかえり</button>' : ''}
          <button class="ttl-icon" data-act="settings"><span>⚙️</span>設定</button>
          ${isInstalled() ? '' : '<button class="ttl-icon" data-act="install"><span>📲</span>アプリに</button>'}
@@ -174,6 +176,103 @@ function showTitle() {
   el.querySelector('[data-act=start]').onclick = showModeSelect;
   el.querySelector('[data-act=zukan]').onclick = () => showZukan();
   el.querySelector('[data-act=gacha]').onclick = () => showGacha();
+  el.querySelector('[data-act=login]').onclick = () => showLoginBonus(el);
+  // きょう はじめて 開いたら、出席カードを 自動で 出す（ハンコ ポン！）
+  if (loginBonus.canStamp()) setTimeout(() => el.isConnected && !el.querySelector('.stamp-card') && showLoginBonus(el), 700);
+}
+
+// ---------- 📅 出席カード（ログインボーナス） ----------
+const LOGIN_PRIZE = (d) => (d.type === 'ticket' ? `🎫×${d.n}` : d.type === 'shard' ? `🧩×${d.n}` : '🌀');
+function showLoginBonus(el) {
+  const res = loginBonus.stamp(); // きょう まだなら ハンコを 押す（もう 押していたら null）
+  const card = loginBonus.card();
+  const n = card.days.length;
+  const cells = card.days
+    .map((d, i) => {
+      const done = i < card.stamped;
+      const today = res && i === res.day - 1;
+      return `<div class="sc-cell ${done ? 'done' : ''} ${today ? 'today' : ''} ${i === n - 1 ? 'last' : ''} ${d.type === 'spinner' ? 'spin' : ''}">
+          <small>${i + 1}日目</small>
+          <span class="sc-prize">${LOGIN_PRIZE(d)}</span>
+          ${done ? `<span class="sc-stamp">${i === n - 1 ? '💮' : '出席'}</span>` : ''}
+        </div>`;
+    })
+    .join('');
+  let body = `<p class="note">きょうは もう 押したよ。また あした！<br><small>休んでも だいじょうぶ。続きから 進むよ</small></p>`;
+  if (res) {
+    const r = res.reward;
+    if (r.type === 'spinner') {
+      body = `<div class="sc-reward">
+          <div class="sc-r-head">🌀 ハンドスピナー！ <span data-el="color">何色かな…？</span></div>
+          <canvas class="sc-spinner"></canvas>
+          <div class="sc-r-name hidden" data-el="name">${r.isNew ? '<span class="sc-new">NEW!</span>' : ''}${rarityTag(r.def)} <b>${r.def.name}</b></div>
+          <div class="sc-r-trait hidden" data-el="trait">✨ <b>${r.def.trait.name}</b>：${r.def.trait.desc}</div>
+        </div>`;
+    } else if (r.type === 'ticket') {
+      body = `<div class="sc-reward"><div class="sc-big">🎫 チケット ×${r.n}</div>${r.allSpinners ? '<p class="note">ハンドスピナーは 全部 そろっているから チケット！</p>' : ''}</div>`;
+    } else {
+      body = `<div class="sc-reward"><div class="sc-big">🧩 かけら ×${r.n}</div>${
+        r.ticketBack ? `<p class="note">かけらが ${GAME.collection.shardsPerTicket}こ たまって、🎫チケット ${r.ticketBack}枚に なった！</p>` : `<p class="note">かけら ${collection.shards()} / ${GAME.collection.shardsPerTicket}（${GAME.collection.shardsPerTicket}こで チケット1枚）</p>`
+      }</div>`;
+    }
+    if (res.day === n) body += `<p class="sc-done">💮 1まい 完成！ あしたから ${card.no + 1}まいめ</p>`;
+  }
+  const ov = openModal(
+    el,
+    `<div class="modal stamp-card">
+       <div class="sc-head">📅 出席カード <small>${card.no}まいめ・合計 ${loginBonus.total()}日</small></div>
+       <div class="sc-grid">${cells}</div>
+       ${body}
+       <button class="btn primary" data-act="close">${res ? 'やったね！' : 'とじる'}</button>
+     </div>`,
+  );
+  ov.style.zIndex = '40';
+  ov.addEventListener('click', (e) => {
+    if (e.target === ov || e.target.closest('[data-act=close]')) {
+      ov.remove();
+      if (res) showTitle(); // チケットの 数などを 出しなおす
+    }
+  });
+  if (!res) return;
+  // ハンコ ポン！
+  setTimeout(() => sfx.hit(9), 450);
+  if (res.reward.type !== 'spinner') {
+    setTimeout(() => sfx.rare(), 900);
+    return;
+  }
+  // ハンドスピナー：はじめは 灰色で くるくる → 色が わかる
+  const def = res.reward.def;
+  const mystery = { ...def, look: { ...def.look, body: '#9e9e9e', spinColor: 'none' } };
+  const cv = ov.querySelector('.sc-spinner');
+  const t0 = performance.now();
+  let shown = false;
+  const draw = () => {
+    if (!cv.isConnected) return;
+    const dpr = Math.min(window.devicePixelRatio || 1, 2.5);
+    const w = cv.clientWidth;
+    const h = cv.clientHeight;
+    if (cv.width !== Math.round(w * dpr)) {
+      cv.width = Math.round(w * dpr);
+      cv.height = Math.round(h * dpr);
+    }
+    const ctx = cv.getContext('2d');
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, w, h);
+    const t = performance.now() - t0;
+    const reveal = t > 1900;
+    if (reveal && !shown) {
+      shown = true;
+      sfx.rare();
+      if ((def.rarity || 'normal') !== 'normal') setTimeout(() => sfx.rare(), 300);
+      ov.querySelector('[data-el=color]').textContent = '';
+      ov.querySelector('[data-el=name]').classList.remove('hidden');
+      ov.querySelector('[data-el=trait]').classList.remove('hidden');
+      cv.classList.add('pop');
+    }
+    drawEraser(ctx, reveal ? def : mystery, w / 2, h / 2, 0, { scale: Math.min(w, h) / 70, tv: { spinning: true } });
+    if (performance.now() - t0 < 30000) requestAnimationFrame(draw);
+  };
+  whenFonts(() => requestAnimationFrame(draw));
 }
 
 // ---------- 2. モード ----------
@@ -442,6 +541,7 @@ function pickerTabs() {
     { id: 'mukashi', label: '🎍昔あそび', items: own(MUKASHI_ERASERS) },
     { id: 'sekai', label: '🌏世界', items: own(SEKAI_ERASERS) },
     { id: 'gacha', label: '文房具', items: own(STATIONERY_ERASERS) },
+    { id: 'spinner', label: '🌀スピナー', items: own(SPINNER_ERASERS) },
     { id: 'champion', label: '🏆優勝', items: own(CHAMPION_ERASERS) },
   ].filter((t) => t.items.length);
 }
@@ -1105,6 +1205,7 @@ function showZukan(tab = 'eraser') {
     { id: 'mukashi', label: '🎍昔あそび', items: MUKASHI_ERASERS },
     { id: 'sekai', label: '🌏世界', items: SEKAI_ERASERS },
     { id: 'gacha', label: '文房具', items: STATIONERY_ERASERS },
+    { id: 'spinner', label: '🌀スピナー', items: SPINNER_ERASERS },
     { id: 'champion', label: '🏆優勝', items: CHAMPION_ERASERS },
     { id: 'card', label: 'カード', items: CARDS },
   ];
@@ -1132,7 +1233,7 @@ function showZukan(tab = 'eraser') {
     }
     const own = collection.owns(item.id);
     const seen = collection.hasSeen(item.id);
-    const how = item.champion ? 'トーナメントで 優勝すると 手に入る' : item.gacha ? 'ガチャで手に入る' : 'CPUで 倒すと手に入る';
+    const how = item.bonus ? '出席カードで 手に入る' : item.champion ? 'トーナメントで 優勝すると 手に入る' : item.gacha ? 'ガチャで手に入る' : 'CPUで 倒すと手に入る';
     return `
       <button class="zukan-cell ${own ? 'own ' + rarityClass(item) : 'locked'}" data-id="${item.id}" ${own ? '' : 'disabled'}>
         ${rarityTag(item)}
@@ -1146,6 +1247,7 @@ function showZukan(tab = 'eraser') {
   if (cur.id === 'chara') note = 'キャラ消しゴムも、CPUが使っているのを 倒すと手に入るよ';
   if (cur.id === 'gacha' || cur.id === 'special' || cur.id === 'kyushoku' || cur.id === 'mukashi' || cur.id === 'sekai') note = `🎫 チケット ${collection.tickets()}枚。ガチャで手に入るよ（CPUに勝つと チケットが もらえることがあるよ）`;
   if (cur.id === 'champion') note = `🏆 トーナメントで 優勝すると、この中から 1つ もらえるよ（これまでの 優勝：${collection.tournamentWins()}回）`;
+  if (cur.id === 'spinner') note = '📅 出席カードの 1日目に、どれか 1つ（色は ランダム）。色で 能力が ちがうよ';
   if (cur.id === 'card') note = '対戦で 配られたカードが 埋まっていくよ';
   if (cur.id === 'fav') note = `⭐ お気に入りは ${GAME.collection.maxFavorites}つまで。消しゴムを選ぶ画面で いちばん上に 出るよ（はずすときは 消しゴムを タップ）`;
 
