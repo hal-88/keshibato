@@ -29,19 +29,23 @@ export function startRandomMatch(opts) {
   let mine = null; // 自分が 待っている 部屋 { code, at }
   let db = null;
 
+  /** その部屋から ぬける（やめたとき・いらなくなったとき） */
+  const leaveRoom = (code) => db.update(`rooms/${code}/members/${db.uid}`, { online: false, left: true }).catch(() => {});
+
   async function withdraw() {
     if (!mine || !db) return;
     const m = mine;
     mine = null;
     await db.remove(`${Q}/${db.uid}`).catch(() => {});
-    await db.update(`rooms/${m.code}/members/${db.uid}`, { online: false, left: true }).catch(() => {});
+    await leaveRoom(m.code);
   }
 
   /** 待っている 人を 1人 とる（とれたら { code, uid }） */
   async function claimOther() {
-    const q = (await db.get(Q)) || {};
     const now = db.now();
     const limit = (ONLINE.randomWaitSec + 5) * 1000;
+    // 古すぎない 人だけ、古い順に 少しだけ 読む（待合リストを まるごと 読まない）
+    const q = (await db.queryFrom(Q, 'at', now - limit, ONLINE.randomQueryMax)) || {};
     const cands = Object.entries(q)
       .filter(([uid, v]) => uid !== db.uid && v?.code && !v.claim && now - (v.at || 0) < limit)
       // 自分も 待っているなら、自分より 先に 待っていた人だけ（おたがいに とりあわないように）
@@ -57,14 +61,26 @@ export function startRandomMatch(opts) {
     return null;
   }
 
-  /** cond() が true になるまで 待つ（ms まで） */
-  async function waitFor(cond, ms) {
-    const end = Date.now() + ms;
-    while (!stopped && Date.now() < end) {
-      if (await cond()) return true;
-      await sleep(500);
-    }
-    return false;
+  /** 部屋に 2人 そろうのを 待つ（見はる。ms まで）。そろったら true */
+  function waitPair(code, ms) {
+    return new Promise((resolve) => {
+      let done = false;
+      let stop = null;
+      const end = (v) => {
+        if (done) return;
+        done = true;
+        clearTimeout(timer);
+        clearInterval(tick);
+        if (stop) stop();
+        resolve(v);
+      };
+      const timer = setTimeout(() => end(false), ms);
+      const tick = setInterval(() => stopped && end(false), 300); // やめたら すぐ
+      stop = db.listen(`rooms/${code}/members`, (members) => {
+        if (sortedMembers({ members }).length >= 2) end(true);
+      });
+      if (done && stop) stop();
+    });
   }
 
   async function run() {
@@ -76,7 +92,7 @@ export function startRandomMatch(opts) {
         const me = await db.get(`${Q}/${db.uid}`);
         if (me?.claim && me.claim !== db.uid) {
           const code = mine.code;
-          const ok = await waitFor(async () => sortedMembers(await db.get(`rooms/${code}`)).length >= 2, ONLINE.randomJoinWaitSec * 1000);
+          const ok = await waitPair(code, ONLINE.randomJoinWaitSec * 1000);
           if (stopped) return;
           if (ok) {
             mine = null;
@@ -102,9 +118,14 @@ export function startRandomMatch(opts) {
       if (stopped) return;
       if (found) {
         try {
-          await joinRoom(found.code, { name: opts.name, eraserId: opts.eraserId, wins: opts.wins });
+          await joinRoom(found.code, { name: opts.name, eraserId: opts.eraserId, wins: opts.wins, random: true });
           await withdraw(); // 自分の 部屋は もう いらない
-          if (!stopped) opts.onMatched({ code: found.code, host: false });
+          if (stopped) {
+            // 入っている とちゅうで やめた：入った 部屋からも ぬける（相手に ゆうれいが 残らないように）
+            await leaveRoom(found.code);
+            return;
+          }
+          opts.onMatched({ code: found.code, host: false });
           return;
         } catch {
           if (mine) await db.set(`${Q}/${db.uid}/claim`, null).catch(() => {}); // 入れなかった：つづける
@@ -116,13 +137,18 @@ export function startRandomMatch(opts) {
         const deskId = DESKS[Math.floor(Math.random() * DESKS.length)].id;
         const code = await createRoom({ name: opts.name, eraserId: opts.eraserId, deskId, random: true, wins: opts.wins });
         if (stopped) {
-          await db.update(`rooms/${code}/members/${db.uid}`, { online: false, left: true }).catch(() => {});
+          await leaveRoom(code);
           return;
         }
         const at = db.now();
+        // 書く 前に mine を 決めておく（書いている 間に やめても、withdraw が 消せるように）
+        mine = { code, at };
         await db.set(`${Q}/${db.uid}`, { code, at });
         db.onDisconnectSet(`${Q}/${db.uid}`, null); // 画面を 閉じたら 待合リストから 消える
-        mine = { code, at };
+        if (stopped) {
+          await withdraw();
+          return;
+        }
       }
       await sleep(ONLINE.randomScanMs);
     }

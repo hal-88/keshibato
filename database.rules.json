@@ -4,6 +4,7 @@
     ".write": false,
     "queue": {
       ".read": "auth != null",
+      ".indexOn": ["at"],
       "$uid": {
         ".write": "auth != null && auth.uid === $uid",
         ".validate": "newData.hasChildren(['code', 'at'])",
@@ -29,7 +30,7 @@
         },
         "members": {
           "$uid": {
-            ".write": "auth != null && auth.uid === $uid",
+            ".write": "auth != null && auth.uid === $uid && (data.exists() || !root.child('rooms/' + $code + '/meta/random').exists() || root.child('rooms/' + $code + '/meta/host').val() === auth.uid || root.child('queue/' + root.child('rooms/' + $code + '/meta/host').val() + '/claim').val() === auth.uid)",
             "name": { ".validate": "newData.isString() && newData.val().length >= 1 && newData.val().length <= 6" },
             "eraserId": { ".validate": "newData.isString() && newData.val().length <= 30" },
             "joinedAt": { ".validate": "newData.isNumber()" },

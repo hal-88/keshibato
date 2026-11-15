@@ -7,7 +7,7 @@ export async function createFirebaseDb(config) {
     import('firebase/database'),
     import('firebase/auth'),
   ]);
-  const { getDatabase, ref, get, set, update, push, remove, onValue, onChildAdded, onDisconnect, serverTimestamp, runTransaction } = dbMod;
+  const { getDatabase, ref, get, set, update, push, remove, onValue, onChildAdded, onDisconnect, serverTimestamp, runTransaction, query, orderByChild, startAt, limitToFirst } = dbMod;
   const { getAuth, signInAnonymously, onAuthStateChanged, setPersistence, browserSessionPersistence } = authMod;
 
   const app = initializeApp(config);
@@ -63,6 +63,11 @@ export async function createFirebaseDb(config) {
       } catch {
         return false; // ルールで ことわられた（もう だれかが 書いた など）
       }
+    },
+    /** child が from 以上の 子を、小さい順に n こまで（待合リストを まるごと 読まない ため。ルールに .indexOn が いる） */
+    async queryFrom(path, child, from, n) {
+      const snap = await get(query(ref(db, path), orderByChild(child), startAt(from), limitToFirst(n)));
+      return snap.exists() ? snap.val() : null;
     },
     listen(path, cb) {
       return onValue(ref(db, path), (snap) => cb(snap.exists() ? snap.val() : null));

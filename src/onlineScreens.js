@@ -13,7 +13,7 @@ import { flipCardHTML } from './ui/cardView.js';
 import { collection } from './progress/collection.js';
 import { sfx } from './audio/sfx.js';
 import { resultActionsHTML, bindResultActions } from './replay/replayUI.js';
-const plain = (h) => String(h).replace(/<br\s*\/?>/g, ' ').replace(/<[^>]+>/g, '').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;/g, "'");
+import { plain } from './ui/text.js';
 import { rewardsHTML } from './ui/rewardView.js';
 import { RoomSession, createRoom, joinRoom, getDb, isTestMode, sortedMembers, roomCapacity } from './online/room.js';
 import { startRandomMatch } from './online/matchQueue.js';
@@ -563,7 +563,14 @@ export function setupOnline(ui) {
         await new Promise((r) => setTimeout(r, Math.max(0, startAt - Date.now())));
         if (done) return;
         try {
-          await startMatch(session, (await session.db.get(`rooms/${session.code}`)) || room);
+          // 待っている 間に 相手が ぬけていたら はじめない（1人だけの 対戦に ならないように）
+          const now = await session.db.get(`rooms/${session.code}`);
+          if (done) return;
+          if (sortedMembers(now).length < 2) {
+            finish('相手が いなくなったよ。もう一度 さがしてね');
+            return;
+          }
+          await startMatch(session, now);
         } catch (err) {
           finish(errorText(err));
         }
@@ -610,6 +617,13 @@ export function setupOnline(ui) {
     });
   }
 
+  /** ランダムマッチの レート：先に「負け」で 計算（rating.begin は 同じ 試合なら 何もしない） */
+  function beginRating(session, room, g) {
+    if (!g?.gid) return;
+    const opp = g.order.find((u) => u !== session.uid);
+    rating.begin(g.gid, room.members?.[opp]?.rating);
+  }
+
   function showDeal(session, room) {
     const g = room.game;
     const myIndex = g.order.indexOf(session.uid);
@@ -618,6 +632,8 @@ export function setupOnline(ui) {
       return;
     }
     const players = playersFrom(session, room, g);
+    // ランダムマッチ：カードの 画面に 来た ときから「負け」で 計算しておく（ここで やめても 負け。レートから にげられない ように）
+    if (session.random) beginRating(session, room, g);
     collection.markSeen(players.map((p) => p.eraser.id));
     const mine = players[myIndex];
     const isNew = mine.card && !collection.hasSeenCard(mine.card.id);
@@ -676,10 +692,7 @@ export function setupOnline(ui) {
   // ---------- 対戦 ----------
   function startBattle(session, room, g, myIndex) {
     const players = playersFrom(session, room, g);
-    if (session.random && g.gid) {
-      const opp = g.order.find((u) => u !== session.uid);
-      rating.begin(g.gid, room.members?.[opp]?.rating);
-    }
+    if (session.random) beginRating(session, room, g); // カードの 画面で もう 始めている（同じ 試合は 2回 数えない）
     const el = screen('', 'battle-screen');
     ui.setBattle(
       createBattle(el, {

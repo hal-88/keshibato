@@ -127,6 +127,15 @@ export function createLocalDb() {
     async remove(path) {
       write((t) => setAt(t, path, null));
     },
+    /** child が from 以上の 子を、小さい順に n こまで */
+    async queryFrom(path, child, from, n) {
+      const obj = getAt(readTree(), path) || {};
+      const list = Object.entries(obj)
+        .filter(([, v]) => v && typeof v[child] === 'number' && v[child] >= from)
+        .sort((a, b) => a[1][child] - b[1][child])
+        .slice(0, n);
+      return list.length ? Object.fromEntries(list) : null;
+    },
     /** 早い者勝ち：path が 空っぽの ときだけ value を 書く。書けたら true */
     async claim(path, value) {
       if (getAt(readTree(), path) != null) return false;

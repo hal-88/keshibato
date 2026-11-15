@@ -27,6 +27,7 @@ export const ONLINE = {
   randomWaitSec: 60, // ランダムマッチで 相手を 待つ 時間（これを すぎたら「今は 相手が いないよ」）
   randomJoinWaitSec: 12, // 相手が「組む」と 書いてから 部屋に 入ってくるまで 待つ 時間
   randomScanMs: 2000, // 待っている 間に 待合リストを 見なおす 間かく
+  randomQueryMax: 10, // 待合リストを 1回に 読む 人数（古い順）
   randomStartMs: 3000, // 相手が 見つかってから 対戦が はじまるまで
   // ランダムマッチの レート（src/progress/rating.js）
   rating: {

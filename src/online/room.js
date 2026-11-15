@@ -32,8 +32,9 @@ export function getDb() {
 
 export const isTestMode = () => !FIREBASE_CONFIG || forceLocal;
 
-/** その部屋に 入れる人数 */
-export const roomCapacity = (meta) => (meta?.mode === 'tournament' ? ONLINE.tournamentMaxPlayers : ONLINE.maxPlayers);
+/** その部屋に 入れる人数（ランダムマッチは 1対1） */
+export const roomCapacity = (meta) =>
+  meta?.mode === 'tournament' ? ONLINE.tournamentMaxPlayers : meta?.random ? 2 : ONLINE.maxPlayers;
 
 const P = (code, sub = '') => `rooms/${code}${sub ? '/' + sub : ''}`;
 
@@ -69,7 +70,7 @@ export async function createRoom({ name, eraserId, deskId, mode = 'battle', wins
 }
 
 /** あいことばで部屋に入る */
-export async function joinRoom(code, { name, eraserId, wins = 0 }) {
+export async function joinRoom(code, { name, eraserId, wins = 0, random = false }) {
   const db = await getDb();
   code = String(code).trim();
   const room = await db.get(P(code));
@@ -77,6 +78,8 @@ export async function joinRoom(code, { name, eraserId, wins = 0 }) {
   if (db.now() - room.meta.createdAt > ONLINE.roomExpireHours * 3600e3) throw new Error('その部屋は もう 終わっているよ');
   const already = room.members?.[db.uid] && !room.members[db.uid].left;
   if (room.meta.status !== 'lobby' && !already) throw new Error('その部屋は もう 対戦中だよ');
+  // ランダムマッチの 部屋は、組んだ 人しか 入れない（合言葉では 入れない。ルールでも ことわる）
+  if (room.meta.random && !random && !already) throw new Error('その部屋は ランダムマッチの 部屋だよ');
   if (!already && sortedMembers(room).length >= roomCapacity(room.meta)) throw new Error('その部屋は 満員だよ');
   await db.set(P(code, `members/${db.uid}`), {
     name: cleanName(name),

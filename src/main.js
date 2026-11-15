@@ -9,7 +9,7 @@ import { rating, tierOf } from './progress/rating.js';
 import { startTitleHero } from './ui/titleHero.js';
 import { resultActionsHTML, bindResultActions } from './replay/replayUI.js';
 import { getLastReplay, openReplayViewer } from './replay/replayView.js';
-const plain = (h) => String(h).replace(/<br\s*\/?>/g, ' ').replace(/<[^>]+>/g, '').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;/g, "'");
+import { plain } from './ui/text.js';
 import { countryLine } from './ui/flags.js';
 import { cardHTML } from './ui/cardView.js';
 import { GAME } from './config/game.js';

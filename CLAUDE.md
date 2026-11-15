@@ -538,7 +538,8 @@
   - 見つかったら「相手が 見つかった！」→ 3秒で 部屋を 作った人が 自動で スタート（待合室は 通らない）。カード → 対戦は ふつうの オンラインと 同じ。結果は「🎲 もう一回 さがす」「出る」。
   - 安全：相手の 名前は 出さない（「相手」と 出る。playersFrom で かえる）。チャットなし・スタンプだけは 今まで どおり。queue には 名前を 書かない。
   - レート（2026-11-13。src/progress/rating.js）：ランダムマッチだけ。はじめ 1000、イロレーティング（はじめの 10試合は K40、そのあと K24。100より 下がらない）。段位：🥉ブロンズ〜1099・🥈シルバー 1100・🥇ゴールド 1250・💎ダイヤ 1400・👑マスター 1600。自分の レートだけ（ランキング・ほかの人の 一覧は なし）。この端末の localStorage（keshigomu-rating-v1。図鑑とは べつ）。対戦が はじまった（戦う！）ときに 先に「負け」で 計算し、結果が 出たら 計算しなおす（とちゅうで やめると 負け）。相手の レートは 部屋の members.rating（見つかったら 書く。ルールが 古くて 書けなくても 対戦は できて、相手は 1000 あつかい）。メニューの タイルの 右上・さがす 画面・見つかった 画面（相手は 段位と 数字だけ）・結果（レート 1000 → 1020 +20、段位が 上がると「○○に 上がった！」）。`node scripts/test-rating.mjs`。数値は online.js の ONLINE.rating。
-  - 数値は online.js の randomWaitSec・randomJoinWaitSec・randomScanMs・randomStartMs。Firebase の ルールに queue を 足した（**コンソールにも 貼りなおしが 必要**）。
+  - バグ直し（2026-11-15）：さがしている とちゅう・部屋に 入る とちゅうで「やめる」を 押しても 待合リスト・部屋に 残らない（入った 部屋からも ぬける）。自動スタートの 前に 2人 いるか 確かめなおす。レートは カードの 画面に 来た ときから「負け」で 計算（見つかった 画面で 相手を 見て にげられない）。ランダムマッチの 部屋は 2人まで・合言葉では 入れない（joinRoom と ルールの 両方で ことわる。ルールは「部屋を 作った人の queue の claim が 自分」か「もう メンバー」の ときだけ 入れる）。待合リストは まるごと 読まずに 新しい 人を 古い順に 10人まで（queryFrom。ルールに queue の .indexOn: at）。2人 そろうのは 見はる（listen）。
+  - 数値は online.js の randomWaitSec・randomJoinWaitSec・randomScanMs・randomStartMs・randomQueryMax。Firebase の ルールに queue を 足した（**コンソールにも 貼りなおしが 必要**）。
 - 2026-11-07: Firebase プロジェクト keshigomu-battle（シンガポール・Spark 無料）につないだ。匿名ログイン・ルール公開ずみ。同じブラウザの2タブでためすときは URL に ?sep をつける（タブごとに別の人になる）。
 - GitHub Pages で公開するときは、Firebase の Authentication →設定 →承認済みドメイン に ○○.github.io を追加する。
 - Firebase の準備（ユーザーがする）：プロジェクト作成 → Realtime Database（シンガポール・ロックモード）→ Authentication で「匿名」をオン → ウェブアプリの firebaseConfig を online.js に貼る → Realtime Database の「ルール」に database.rules.json の中身を貼って公開。
