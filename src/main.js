@@ -8,6 +8,7 @@ import { collection, isMukashiSeason, mukashiUntil, gachaModes } from './progres
 import { rating, tierOf } from './progress/rating.js';
 import { startTitleHero } from './ui/titleHero.js';
 import { loginBonus } from './progress/loginBonus.js';
+import { setupMaintenance } from './ui/maintenance.js';
 import { resultActionsHTML, bindResultActions } from './replay/replayUI.js';
 import { getLastReplay, openReplayViewer } from './replay/replayView.js';
 import { plain } from './ui/text.js';
@@ -128,8 +129,12 @@ function screen(html, cls = '') {
   const el = app.firstElementChild;
   if (html) watchFit(el);
   else stopFit(); // 対戦画面（中身なし）は 自分で 合わせる
+  maint?.check(); // メンテナンス中なら おおう（対戦の とちゅうは じゃましない）
   return el;
 }
+
+// 🔧 メンテナンス中（遊べない 時間）。対戦中は 最後まで 遊べる。おわったら タイトルへ
+let maint = null;
 
 // 描画は Web フォントの読み込みと画面のレイアウトを待ってから
 const fontsReady = document.fonts?.ready ?? Promise.resolve();
@@ -1669,6 +1674,11 @@ const online = setupOnline({
   setBattle: (b) => {
     battle = b;
   },
+});
+
+maint = setupMaintenance({
+  inBattle: () => !!app.querySelector('.screen.battle-screen'),
+  onEnd: () => showTitle(),
 });
 
 // 招待リンク（?room=1234）から 来たら、その部屋に 入る 画面へ

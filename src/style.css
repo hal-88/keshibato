@@ -4452,3 +4452,61 @@ canvas.board {
   font-weight: 800;
   line-height: 18px;
 }
+
+/* 🔧 メンテナンス中（遊べない 時間） */
+.maint {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  background-color: var(--bg);
+  background-image:
+    linear-gradient(var(--line) 1px, transparent 1px),
+    linear-gradient(90deg, var(--line) 1px, transparent 1px);
+  background-size: 28px 28px;
+  text-align: center;
+}
+.maint-box {
+  width: min(360px, 100%);
+  padding: 26px 20px 22px;
+  border-radius: 22px;
+  background: #fff;
+  box-shadow: 0 5px 0 rgba(0, 0, 0, 0.12);
+}
+.maint-icon {
+  font-size: 56px;
+  animation: maint-wiggle 2s ease-in-out infinite;
+}
+@keyframes maint-wiggle {
+  0%, 100% { transform: rotate(-12deg); }
+  50% { transform: rotate(12deg); }
+}
+.maint-box h2 {
+  margin: 6px 0 4px;
+  font-size: 28px;
+  font-weight: 800;
+}
+.maint-box p {
+  margin: 4px 0;
+  color: var(--sub);
+  font-weight: 700;
+}
+.maint-next {
+  display: inline-block;
+  margin: 12px 0 6px;
+  padding: 8px 18px;
+  border-radius: 999px;
+  background: #fff3e0;
+  color: #e65100;
+  font-weight: 800;
+  font-size: 18px;
+}
+.maint-next b {
+  font-size: 24px;
+}
+.maint-note {
+  font-size: 13px;
+}
