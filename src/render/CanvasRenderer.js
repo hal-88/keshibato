@@ -7,6 +7,21 @@ import { deskSize, eraserExtent } from '../logic/geometry.js';
 
 const WORLD_MARGIN = 70; // 机のまわりに見せる床の広さ
 
+/**
+ * 空中の 高さ（0〜1）。t は とびはじめ 0 → 着地 1。
+ * すっと 上がって（さいしょの 3わり）、てっぺんで ふわっと 止まり、ゆっくり おりて 地面の 近くで さらに ゆっくり（着地が やわらか）。
+ * 着地が のびている（下に だれかが いる）ときは 少し 浮いた まま
+ */
+function airHeight(t) {
+  if (t >= 1) return 0.08;
+  if (t < 0.3) {
+    const u = t / 0.3;
+    return 1 - (1 - u) ** 3; // すっと 上がる
+  }
+  const q = (t - 0.3) / 0.7;
+  return Math.max(0.08 * q, 1 - q * q * (3 - 2 * q)); // ゆっくり おりる（はじめも おわりも ゆるやか）
+}
+
 export class CanvasRenderer {
   constructor(canvas) {
     this.canvas = canvas;
@@ -18,6 +33,7 @@ export class CanvasRenderer {
     this.flip = false; // true：机を180度回して見せる（オンラインで、自分の席を画面の下にする）
     this.cam = { x: 0, y: 0, zoom: 1 }; // スロー演出のズーム
     this.effects = [];
+    this._prevLand = new Map(); // 着地の ほこりを 1回だけ 出す
     this.shakeUntil = 0;
     this.shakePower = 0;
   }
@@ -207,9 +223,19 @@ export class CanvasRenderer {
       if (e.effects.invisible) alpha = Math.min(alpha, 0.4);
       if (state.seatMoved?.includes(e.pid)) alpha = Math.min(alpha, 0.25); // せきがえで 場所を決めたもの
       // ジャンプ中：空中なので 大きく見えて、かげが はなれる
-      const air = e.effects.airborne ? 1.25 : 1;
-      if (air > 1) this._drawAirShadow(ctx, e);
-      drawEraser(ctx, e.def, e.x + jx, e.y + jy, e.angle, { scale: e.size * air, alpha, tv: e.trait, shadow: !e.trait.clear && air === 1 });
+      // 空中：すっと 高く 上がって、ゆっくり ふわっと おりてくる（高さで 大きく 見えて、かげが はなれる）
+      const flying = e.effects.flying ?? e.effects.airborne; // 古い 記録（ふりかえり）にも 合わせる
+      const h = flying ? airHeight(e.effects.airT ?? 0.5) : 0;
+      const land = e.effects.landing || 0; // 着地 した ばかり：少し つぶれて もどる
+      const air = (1 + 0.7 * h) * (1 - 0.08 * Math.sin(Math.PI * land));
+      // 画面の 上の ほうへ 浮く（机が 回っていても 画面で 上）
+      const lift = this.screenDeltaToWorld(0, -26 * h);
+      if (flying) this._drawAirShadow(ctx, e, h);
+      // ふわっと 着地した しゅんかん：小さな ほこりの 輪
+      const pl = this._prevLand.get(e.pid) || 0;
+      if (land > 0.8 && pl < 0.5) this.addEffect({ type: 'ring', x: e.x, y: e.y, color: 'rgba(160,130,90,0.55)', dur: 420, r: eraserExtent(e.def) * e.size * 0.7, grow: 26 });
+      this._prevLand.set(e.pid, land);
+      drawEraser(ctx, e.def, e.x + jx + lift.x, e.y + jy + lift.y, e.angle, { scale: e.size * air, alpha, tv: e.trait, shadow: !e.trait.clear && !flying });
       if (e.effects.shield) this._drawShield(ctx, e, now);
       if (e.effects.inked) this._drawInk(ctx, e); // ハゴイタンの 墨で ×
       if (e.trait.frozen && alpha > 0.5) this._drawFrozen(ctx, e); // 白の スピナーに こおらされた
@@ -1130,12 +1156,15 @@ export class CanvasRenderer {
     ctx.restore();
   }
 
-  // ジャンプ中の かげ（地面に はなれて うつる）
-  _drawAirShadow(ctx, e) {
+  // ジャンプ中の かげ（高いほど 地面に はなれて、小さく うすく うつる）
+  _drawAirShadow(ctx, e, h = 0.6) {
+    const r = eraserExtent(e.def) * e.size;
+    const k = 1 - 0.3 * h;
+    const off = this.screenDeltaToWorld(3 + 6 * h, 5 + 8 * h); // かげは 画面で 少し 右下
     ctx.save();
-    ctx.fillStyle = 'rgba(40,25,10,0.22)';
+    ctx.fillStyle = `rgba(40,25,10,${(0.32 - 0.16 * h).toFixed(3)})`;
     ctx.beginPath();
-    ctx.ellipse(e.x + 10, e.y + 16, eraserExtent(e.def) * e.size * 0.9, eraserExtent(e.def) * e.size * 0.55, 0, 0, Math.PI * 2);
+    ctx.ellipse(e.x + off.x, e.y + off.y, r * 0.95 * k, r * 0.95 * k, 0, 0, Math.PI * 2);
     ctx.fill();
     ctx.restore();
   }

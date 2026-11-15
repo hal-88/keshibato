@@ -296,6 +296,8 @@ export class Game {
       reverseNext: false, // さかさま
       airborne: false, // ジャンプ中
       airUntil: 0,
+      airFrom: 0, // 空中に なった 時間（見た目の 高さ）
+      landAt: -1e9, // 着地した 時間（ふわっと 着地する 見た目）
       pierceUntil: 0, // つらぬき
       pierceSpeed: 0,
       pierceDir: null,
@@ -562,6 +564,7 @@ export class Game {
     h.n++;
     h.next += t.step ?? 80;
     e.airborne = true;
+    e.airFrom = this.time;
     e.airUntil = this.time + Math.max(40, ((t.air ?? 45) / Math.max(1, e.body.speed)) * BASE_DT);
     e.hopLand = true;
     e.body.collisionFilter.mask = 0;
@@ -913,6 +916,7 @@ export class Game {
       const hop = this.turn.jump ? 0 : this._copterHop(e, ux, uy);
       if (hop > 0) {
         e.airborne = true;
+        e.airFrom = this.time;
         e.airUntil = this.time + Math.max(50, (hop / Math.max(1, v)) * BASE_DT);
         e.body.collisionFilter.mask = 0;
       }
@@ -943,6 +947,7 @@ export class Game {
     const hop = t.id === 'copter' && !this.turn.jump && s >= (t.minPower ?? 0.6) ? this._copterHop(e, ux, uy) : 0;
     if (hop > 0) {
       e.airborne = true;
+      e.airFrom = this.time;
       e.airUntil = this.time + Math.max(50, (hop / Math.max(1, v)) * BASE_DT);
       e.copterLand = true;
       e.body.collisionFilter.mask = 0;
@@ -956,6 +961,7 @@ export class Game {
     // ジャンプ：しばらく 空中（ほかのものを 飛びこえる）
     if (this.turn.jump) {
       e.airborne = true;
+      e.airFrom = this.time;
       e.airUntil = this.time + this.turn.jump;
       e.body.collisionFilter.mask = 0;
       this._emit('cardFx', { type: 'jump', playerIndex, x: e.body.position.x, y: e.body.position.y });
@@ -2089,6 +2095,7 @@ export class Game {
       ) || this.pencils.some((pc) => pc.alive && Matter.Collision.collides(e.body, pc.body)?.collided);
       if (overlap) continue;
       e.airborne = false;
+      e.landAt = this.time;
       if (!e.ghost) e.body.collisionFilter.mask = 0xffffffff;
       if (e.hopLand) {
         // ケンパー：着地の たびに 勢いが 落ちる
@@ -2413,6 +2420,19 @@ export class Game {
   spinStopped(i) {
     const e = this.erasers[i];
     return !!e && traitOf(e).id === 'spinner' && e.spinLeft <= 0;
+  }
+
+  /**
+   * 空中の 見た目：本当に 空中に いる 時間より 少し 長く（0.6倍）、ゆっくり おりてくるように 見せる（当たり判定は かえない）
+   * flying … 見た目で 空中か／airT … 0 とびはじめ → 1 着地／landing … 着地 した ばかり 1 → 0
+   */
+  _flyView(e) {
+    if (!e.airFrom && !e.airborne) return { flying: false, airT: 0, landing: 0 };
+    const dur = Math.max(1, e.airUntil - e.airFrom);
+    const visEnd = e.airUntil + dur * 0.6;
+    if (e.airborne && this.time >= visEnd) return { flying: true, airT: 1, landing: 0 }; // 下に だれかが いて 着地が のびている
+    if (this.time < visEnd && this.time >= e.airFrom) return { flying: true, airT: (this.time - e.airFrom) / (visEnd - e.airFrom), landing: 0 };
+    return { flying: false, airT: 0, landing: Math.max(0, 1 - (this.time - Math.max(visEnd, e.landAt)) / 260) };
   }
 
   /** ハンドスピナーが 回っているか */
@@ -3264,6 +3284,7 @@ export class Game {
         extraLife: e.extraLife,
         reversed: e.reverseNext,
         airborne: e.airborne,
+        ...this._flyView(e), // 空中の 見た目（flying・airT・landing）
         power: e.powerNext > 0,
         steamy: this._steamy(e), // ミソシル：湯気で 見えにくい（CPU の ねらいも ズレる）
         inked: e.inked, // ハゴイタンの 墨（ねらいの線が 見えない）

@@ -714,7 +714,7 @@ export function createBattle(root, { desk, players, onEnd, onQuit, label = '', h
       sfx.whoosh();
       say('🦘 ジャンプ！', '#10b981');
     } else if (type === 'land') {
-      sfx.hit(3);
+      later(220, () => sfx.hit(3)); // 見た目は 少し おくれて ふわっと 着地する（ほこりは CanvasRenderer）
     } else if (type === 'cushion') {
       sfx.boing();
       say('↩️ ポヨン！', '#ef5350');
