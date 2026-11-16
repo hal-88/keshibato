@@ -1977,5 +1977,16 @@ export class CanvasRenderer {
       label += Math.abs(aim.spin || 0) >= (pe.def.trait.respinMin ?? 0.35) ? '　🌀回し直し！' : '　🌀横から 引いて';
     } else if (Math.abs(aim.spin || 0) > 0.01) label += '　回転 ' + (aim.spin > 0 ? '↻' : '↺');
     ctx.fillText(label, this.w / 2, y - 6);
+    // 強さの ％（バーの 右に 小さく）。カード・能力で ふつうより 強い ときは 100％を こえて 金色
+    const pct = Math.round((aim.power ?? aim.strength) * 100);
+    const over = pct > 100;
+    ctx.font = `800 ${over ? 14 : 12}px "M PLUS Rounded 1c", sans-serif`;
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'middle';
+    ctx.lineWidth = 3;
+    ctx.strokeStyle = 'rgba(0,0,0,0.45)';
+    ctx.strokeText(`${pct}%`, x + bw + 9, y + bh / 2);
+    ctx.fillStyle = over ? '#ffd54f' : 'rgba(255,255,255,0.92)';
+    ctx.fillText(`${pct}%`, x + bw + 9, y + bh / 2);
   }
 }

@@ -166,22 +166,34 @@ export class FlickInput {
     const dx = this.drag.sx - p.x;
     const dy = this.drag.sy - p.y;
     const pull = Math.hypot(dx, dy);
-    const { maxPullPx, minPullPx } = GAME.input;
+    const { minPullPx } = GAME.input;
+    const maxPullPx = this.maxPull();
     const d = this.renderer.screenDeltaToWorld(dx, dy);
     // （フルーツンでこんらん中でも 矢印はふつう。たまに反対に飛ぶのは Game が決める）
     // さかさま（カード）のときは、ほんとうに飛ぶ向き（反対）に 矢印を出す
     // ショウジョウヅツは 転がる向きにしか 進めないので、その向きを出す
     const [ax, ay] = this.game.aimDir(this.drag.playerIndex, d.x, d.y);
+    const strength = pull < minPullPx ? 0 : Math.min(1, pull / maxPullPx);
+    const spin = this._spin(ax, ay);
     this.aim = {
       playerIndex: this.drag.playerIndex,
       dirX: ax, // 矢印の向き（ほんとうに飛ぶ向き）
       dirY: ay,
       rawX: d.x, // Game.flick にわたす向き
       rawY: d.y,
-      strength: pull < minPullPx ? 0 : Math.min(1, pull / maxPullPx),
+      strength,
       // 回転：指を 置いた 場所が、ねらいの 線の 右か 左か
-      spin: this._spin(ax, ay),
+      spin,
+      // 画面に 出す 強さ（％。カード・能力の 倍率つき。ふつうの 全力が 1）
+      power: this.game.aimPower(this.drag.playerIndex, strength, spin),
     };
+  }
+
+  /** 最大パワーに なる 引きの 長さ（画面の ピクセル）。小さい 画面では 少し 短い */
+  maxPull() {
+    const c = GAME.input;
+    const short = Math.min(this.renderer.w || Infinity, this.renderer.h || Infinity);
+    return Math.max(c.minMaxPullPx ?? 0, Math.min(c.maxPullPx, short * (c.maxPullScreen ?? 1)));
   }
 
   // 中心からずれたところを弾くと回転する（-1〜1）

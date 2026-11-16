@@ -420,6 +420,7 @@ export function createBattle(root, { desk, players, onEnd, onQuit, label = '', h
       if (destroyed) return;
       const t = Math.min(1, (performance.now() - start) / cfg.aimShowMs);
       cpuAim.strength = plan.strength * (1 - (1 - t) * (1 - t));
+      cpuAim.power = game.aimPower(idx, cpuAim.strength, plan.spin || 0);
       if (t < 1) {
         requestAnimationFrame(tick);
       } else {

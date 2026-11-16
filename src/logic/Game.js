@@ -1629,12 +1629,14 @@ export class Game {
       }
       if (!spot) continue; // すきまがなければ、こなごなになった（置かない）
       const sp = d.shoot != null ? d.shoot : 1.5 + Math.min(4, e.body.speed * 0.5);
+      // 向きと 回り方は、出てくる 場所で きまる（ランダムでは ない。同じ 当たり方なら 同じ ところに 転がる）
+      const jSide = Math.sin(spot.a - base) >= 0 ? 1 : -1;
       this._addJunk({
-        x: spot.x, y: spot.y, angle: e.body.angle + (Math.random() - 0.5),
+        x: spot.x, y: spot.y, angle: e.body.angle + 0.3 * jSide,
         w, h, color: d.color, kind: d.kind,
         vx: e.body.velocity.x * 0.5 + Math.cos(spot.a) * sp,
         vy: e.body.velocity.y * 0.5 + Math.sin(spot.a) * sp,
-        av: (Math.random() - 0.5) * 0.3,
+        av: 0.12 * jSide,
       });
     }
   }
@@ -2506,7 +2508,10 @@ export class Game {
         break;
       case 'medal': // キンメダル：当てた相手を くるっと 回す
         if (o && o.playerIndex !== e.playerIndex && e.body.speed >= o.body.speed && !o.body.isStatic) {
-          const k = (t.spinKick ?? 0.45) * Math.min(1, power / 8) * (Math.random() < 0.5 ? -1 : 1);
+          // 回す 向きは、相手が 自分の 進む 線の どちら側に いるかで きまる（ランダムでは ない）
+          const mv = e.body.velocity;
+          const side = mv.x * (o.body.position.y - pos.y) - mv.y * (o.body.position.x - pos.x) >= 0 ? 1 : -1;
+          const k = (t.spinKick ?? 0.45) * Math.min(1, power / 8) * side;
           Body.setAngularVelocity(o.body, o.body.angularVelocity + k);
         }
         break;
@@ -2528,6 +2533,36 @@ export class Game {
       default:
         break;
     }
+  }
+
+  /**
+   * 画面に 出す 強さ（ふつうの 全力を 1 として）。弾いた ときと 同じ 倍率を かける
+   * （フルパワー・ため打ちの カード、ペタン・ユンノ・サイコロン・シャガイン・スピナーなどの 能力。
+   *  運で きまる もの〔フルーツンの 混乱・キラリンの ブレ〕は のぞく）
+   * @param strength 引いた 強さ（0〜1）
+   * @param spin     かける 回転（止まった スピナーの 回し直しに 使う）
+   */
+  aimPower(i, strength, spin = 0) {
+    const e = this.erasers[i];
+    if (!e) return strength;
+    const t = traitOf(e);
+    let s = Math.max(0, Math.min(1, strength));
+    if (t.id === 'kabaddi' && this.turn.kabaddi === 1) s *= t.second ?? 0.75; // カバディン：2回目は 弱い
+    if (t.id === 'curling' && s < (t.minPower ?? 0.5)) s *= t.weak ?? 0.55; // カーリン：弱いと 動かない
+    if (t.id === 'boccia') s = t.fixed ?? 0.72; // ボッチャ：いつも 同じ
+    let mul = this.turn.powerMul * (e.dicePower || 1);
+    if (t.id === 'yut') mul *= e.yutPower || 1;
+    if (t.id === 'shagai') mul *= this._shagaiFace(e).power ?? 1;
+    // ペタン：まんなか 近くから 弾くと パワーアップ（まだ この 番で つかっていなければ）
+    if (t.id === 'petanque' && !this.turn.petanque && Math.hypot(e.body.position.x, e.body.position.y) < (t.center ?? 95)) mul *= t.boost ?? 1.3;
+    // スピナー：止まっていても、横から 引けば 回し直して 弾く（CPU は いつも）
+    if (t.id === 'spinner' && e.spinLeft <= 0 && (Math.abs(spin) >= (t.respinMin ?? 0.35) || this.players[i].type === 'cpu')) {
+      const keep = e.spinLeft;
+      e.spinLeft = 1;
+      mul *= this._spinPower(e);
+      e.spinLeft = keep;
+    } else mul *= this._spinPower(e);
+    return s * mul;
   }
 
   /** i 番目の人の ハンドスピナーが 止まっているか（画面の 説明用） */
