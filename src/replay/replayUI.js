@@ -55,7 +55,7 @@ async function openShareImage(root, result, players, info) {
     return;
   }
   url = URL.createObjectURL(blob);
-  const name = `keshigomu-battle-${Date.now()}.png`;
+  const name = `keshibato-${Date.now()}.png`;
   const title = info.headline ? `消しゴムバトル：${info.headline}` : '消しゴムバトル';
   const canShare = !!navigator.canShare?.({ files: [new File([blob], name, { type: 'image/png' })] });
   modal.innerHTML = `

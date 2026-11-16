@@ -113,7 +113,9 @@ export async function makeResultImage(d) {
   const dt = new Date();
   const date = `${dt.getFullYear()}/${dt.getMonth() + 1}/${dt.getDate()}`;
   text(`${d.deskName ? `机：${d.deskName}　` : ''}${d.turns ? `${d.turns}ターン　` : ''}${date}`, S / 2, 960, 32, '#6d5d49');
-  text('hal-88.github.io/keshigomu-battle', S / 2, 1022, 30, '#ff6b4a');
+  // いま 開いている ページの URL（リポジトリの 名前を かえても そのまま 合う）
+  const here = typeof location !== 'undefined' ? `${location.host}${location.pathname.replace(/\/[^/]*$/, '')}` : '';
+  text(here || 'hal-88.github.io/keshibato', S / 2, 1022, 30, '#ff6b4a');
 
   return new Promise((res) => cv.toBlob((b) => res(b), 'image/png'));
 }
