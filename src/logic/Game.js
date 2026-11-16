@@ -272,6 +272,8 @@ export class Game {
       splitDone: false,
       absorbNext: 0,
       pushNext: null,
+      hitScale: 0, // 当たり方の 倍率（つぎの コマで 速さに かける。0 は なし）
+      spinNext: null, // 回転で 当てられた：少し あとで うつる 回転と よこへの はじき
       squishAt: -1e9,
       lastBreakAt: -1e9,
       // ガチャの とくべつ消しゴム
@@ -1744,6 +1746,21 @@ export class Game {
     for (const e of this._allPieces()) {
       if (!e.alive || e.body.isStatic) continue;
       const b = e.body;
+      if (
+        e.spinNext &&
+        this.time >= e.spinNext.at &&
+        (this.time >= e.spinNext.until || !Matter.Collision.collides(b, e.spinNext.from)?.collided)
+      ) {
+        // 回転で 当てられた：回転が うつって、よこへ はじかれる（当てた 相手と はなれてから）
+        Body.setAngularVelocity(b, b.angularVelocity + e.spinNext.w);
+        Body.setVelocity(b, { x: b.velocity.x + e.spinNext.x, y: b.velocity.y + e.spinNext.y });
+        e.spinNext = null;
+      }
+      if (e.hitScale) {
+        // 当たり方（まん中・はし・回転）で 押される 強さが かわる
+        Body.setVelocity(b, { x: b.velocity.x * e.hitScale, y: b.velocity.y * e.hitScale });
+        e.hitScale = 0;
+      }
       if (e.absorbNext) {
         Body.setVelocity(b, { x: b.velocity.x * e.absorbNext, y: b.velocity.y * e.absorbNext });
         Body.setAngularVelocity(b, b.angularVelocity * e.absorbNext);
@@ -1974,9 +1991,6 @@ export class Game {
         x = sups[0].x;
         y = sups[0].y;
       }
-      // 回転：ぶつかった 場所で 回り方が きまる（ランダムでは ない）
-      this._spinHit(a, b, x, y, power);
-      this._spinHit(b, a, x, y, power);
       // とくせい
       const pa = a.plugin?.piece;
       const pb = b.plugin?.piece;
@@ -1985,11 +1999,66 @@ export class Game {
       if (b.plugin?.domino && pa) this._dominoHit(b, pa);
       // 守りのとくせい（ニンジャ・ユウレイ・カガミン）・ふでばこ：ぶつかったこと自体を なかったことにする
       if (pa && pb && (this._defend(pair, pa, pb, power) || this._defend(pair, pb, pa, power))) continue;
+      // 当たり方（まん中・はし・回転）で 押す 力と 回り方が きまる（ランダムでは ない）
+      const how = this._hitTransfer(a, b, x, y, power);
       if (pa && pb && this.phase === 'moving') this._cardHit(pair, pa, pb);
       if (pa) this._traitHit(pa, pb, power, x, y);
       if (pb) this._traitHit(pb, pa, power, x, y);
-      this._emit('hit', { x, y, power, pencil: a.label === 'pencil' || b.label === 'pencil' });
+      this._emit('hit', { x, y, power, pencil: a.label === 'pencil' || b.label === 'pencil', just: how.just, spun: how.spun });
     }
+  }
+
+  /**
+   * 当たり方による 威力の 差（a と b が (x, y) で ぶつかった。ぶつかる 前の 速さ・回転で 計算する）
+   * ・速い ほうが「当てた 側」、おそい ほうが「当てられた 側」。
+   * ・まん中を まっすぐ つくと 押す 力が 最大（centerPower）、はしに 当たるほど 弱い（edgePower）。
+   * ・当てた 側が 回っていると、押す 力は へる（spinPushLoss）が、相手に 回転が うつり（spinTransfer）、よこへ はじく（spinThrow）。
+   * @returns { just: まん中を 強く ついた, spun: 回転で 当てた }
+   */
+  _hitTransfer(a, b, x, y, power) {
+    const H = PHYSICS.hit;
+    const [st, tg] = (a.speed || 0) >= (b.speed || 0) ? [a, b] : [b, a];
+    const wSt = st.angularVelocity || 0; // ぶつかる 前の 回転（_spinHit が かえる 前に 読む）
+    const stV = { x: st.velocity.x - tg.velocity.x, y: st.velocity.y - tg.velocity.y };
+    // それぞれが くるっと 回る・回りながら 当たって 自分が それる
+    this._spinHit(a, b, x, y, power);
+    this._spinHit(b, a, x, y, power);
+    const out = { just: false, spun: false };
+    const tp = tg.plugin?.piece;
+    if (!H || !tp || tg.isStatic || tg.label !== 'eraser' || st.label !== 'eraser' || !st.plugin?.piece) return out;
+    // まん中の 近さ：当たった 場所が、ぶつかってきた 向きの 線から どれだけ ずれているか（1 が ど真ん中）
+    const rx = x - tg.position.x;
+    const ry = y - tg.position.y;
+    const rl = Math.hypot(rx, ry);
+    const vl = Math.hypot(stV.x, stV.y);
+    if (rl < 1e-6 || vl < 1e-6) return out;
+    const lever = Math.abs((rx * stV.y - ry * stV.x) / (rl * vl));
+    const center = 1 - Math.min(1, lever);
+    // 当てた 側の 回転（いちばん 速い 回転を 1 として）
+    const spin = Math.min(1, Math.abs(wSt) / PHYSICS.spin.maxAngular);
+    let scale = (H.edgePower + (H.centerPower - H.edgePower) * center) * (1 - H.spinPushLoss * spin);
+    scale = Math.max(H.minScale, Math.min(H.maxScale, scale));
+    tp.hitScale = Math.max(H.minScale, Math.min(H.maxScale, (tp.hitScale || 1) * scale));
+    // 弱い 当たり（はし・回転）では、当てた 側の 勢いも 同じだけ へる（そのまま 追いかけて もう1回 押して しまわないように）
+    const sp = st.plugin.piece;
+    if (scale < 1) sp.hitScale = Math.max(H.minScale, (sp.hitScale || 1) * scale);
+    if (spin > 0.05) {
+      // 回転が うつる：相手は 逆向きに 回る（歯車と 同じ）。こすれて 相手を よこへ はじく。
+      // ぶつかった しゅんかんは まだ くっついているので、少し はなれてから きかせる（spinDelayMs）
+      const sx = x - st.position.x;
+      const sy = y - st.position.y;
+      tp.spinNext = {
+        from: st, // この 相手と はなれてから きかせる
+        at: this.time + (H.spinDelayMs ?? 0),
+        until: this.time + 500,
+        w: -wSt * H.spinTransfer,
+        x: -sy * wSt * H.spinThrow,
+        y: sx * wSt * H.spinThrow,
+      };
+    }
+    out.just = center >= H.justCenter && spin < 0.2 && power >= H.justPower;
+    out.spun = spin >= 0.35 && power >= 3;
+    return out;
   }
 
   /**

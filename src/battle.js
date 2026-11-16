@@ -469,9 +469,16 @@ export function createBattle(root, { desk, players, onEnd, onQuit, label = '', h
     }
   });
 
-  on('hit', ({ x, y, power, pencil }) => {
+  on('hit', ({ x, y, power, pencil, just, spun }) => {
     sfx.hit(power, pencil);
     renderer.addEffect({ type: 'burst', x, y, power, dur: 300 });
+    // 当たり方：まん中を 強く ついた／回転で 当てた（小さく 出す）
+    if (just) {
+      renderer.addEffect({ type: 'ring', x, y, color: '#ffd54f', dur: 380, r: 12, grow: 46 });
+      renderer.addEffect({ type: 'text', x, y, text: 'ジャスト！', color: '#ffd54f', stroke: true, size: 18, dur: 800 });
+    } else if (spun) {
+      renderer.addEffect({ type: 'text', x, y, text: '🌀 回転！', color: '#81d4fa', stroke: true, size: 16, dur: 800 });
+    }
   });
 
   on('fall', ({ playerIndex, gone }) => {
